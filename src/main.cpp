@@ -68,7 +68,7 @@ int main()
 		{
 			vec3 break_pos;
 			uint16 broken_block = world_break_block_raycast(world->chunks, player->position, player->front, &break_pos);
-			//if (broken_block) add_loose_item(items, Item{ BLOCK_ITEM , broken_block, 1 }, break_pos, vec3{ 0, 2, 0 });
+			if (broken_block) add_loose_item(items, Item{ BLOCK_ITEM , broken_block, 1 }, break_pos, vec3{ 0, 2, 0 });
 		}
 
 		if (mouse.right_button.is_pressed && !mouse.right_button.was_pressed)
@@ -123,7 +123,7 @@ int main()
 
 		draw(chunk_renderer->solid_mesh, chunk_renderer->num_solids);
 
-		static float timer = 0; timer += frame_time;
+		static float timer = 0; timer += .25 * frame_time;
 		bind(chunk_renderer->fluid_shader);
 		set_mat4(chunk_renderer->fluid_shader, "proj_view", proj_view);
 		set_float(chunk_renderer->fluid_shader, "timer", timer);
