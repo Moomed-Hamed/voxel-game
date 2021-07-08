@@ -1,7 +1,3 @@
-//  CORE PRINCIPLES :
-// - understand limits, no program can process infinite data
-// - know exact program memory usage
-
 #pragma comment(lib, "winmm")
 #pragma comment(lib, "opengl32")
 #pragma comment(lib, "external/GLEW/glew32s")

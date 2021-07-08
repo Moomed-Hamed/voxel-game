@@ -111,7 +111,7 @@ void update_mouse(Mouse* mouse, Window window)
 	}
 }
 
-#define NUM_KEYBOARD_BUTTONS 20
+#define NUM_KEYBOARD_BUTTONS 34 // update when adding keyboard buttons
 struct Keyboard
 {
 	union
@@ -120,10 +120,12 @@ struct Keyboard
 
 		struct
 		{
+			Button A, B, C, D, E, F, G, H;
+			Button I, J, K, L, M, N, O, P;
+			Button Q, R, S, T, U, V, W, X;
+			Button Y, Z;
+			
 			Button ESC, SPACE;
-			Button W, A, S, D;
-			Button T, G, F, H;
-			Button E, R, Y, X;
 			Button SHIFT, CTRL;
 			Button UP, DOWN, LEFT, RIGHT;
 		};
@@ -132,31 +134,42 @@ struct Keyboard
 
 void init_keyboard(Keyboard* keyboard)
 {
-	keyboard->ESC = { false, false, GLFW_KEY_ESCAPE };
-	keyboard->SPACE = { false, false, GLFW_KEY_SPACE };
-
-	keyboard->W = { false, false, GLFW_KEY_W };
-	keyboard->A = { false, false, GLFW_KEY_S };
-	keyboard->S = { false, false, GLFW_KEY_A };
+	keyboard->A = { false, false, GLFW_KEY_A };
+	keyboard->B = { false, false, GLFW_KEY_B };
+	keyboard->C = { false, false, GLFW_KEY_C };
 	keyboard->D = { false, false, GLFW_KEY_D };
-
-	keyboard->T = { false, false, GLFW_KEY_T };
-	keyboard->G = { false, false, GLFW_KEY_G };
-	keyboard->F = { false, false, GLFW_KEY_F };
-	keyboard->H = { false, false, GLFW_KEY_H };
-
 	keyboard->E = { false, false, GLFW_KEY_E };
+	keyboard->F = { false, false, GLFW_KEY_F };
+	keyboard->G = { false, false, GLFW_KEY_G };
+	keyboard->H = { false, false, GLFW_KEY_H };
+	keyboard->I = { false, false, GLFW_KEY_I };
+	keyboard->J = { false, false, GLFW_KEY_J };
+	keyboard->K = { false, false, GLFW_KEY_K };
+	keyboard->L = { false, false, GLFW_KEY_L };
+	keyboard->M = { false, false, GLFW_KEY_M };
+	keyboard->N = { false, false, GLFW_KEY_N };
+	keyboard->O = { false, false, GLFW_KEY_O };
+	keyboard->P = { false, false, GLFW_KEY_P };
+	keyboard->Q = { false, false, GLFW_KEY_Q };
 	keyboard->R = { false, false, GLFW_KEY_R };
-	keyboard->Y = { false, false, GLFW_KEY_Y };
+	keyboard->S = { false, false, GLFW_KEY_S };
+	keyboard->T = { false, false, GLFW_KEY_T };
+	keyboard->U = { false, false, GLFW_KEY_U };
+	keyboard->V = { false, false, GLFW_KEY_V };
+	keyboard->W = { false, false, GLFW_KEY_W };
 	keyboard->X = { false, false, GLFW_KEY_X };
+	keyboard->Y = { false, false, GLFW_KEY_Y };
+	keyboard->Z = { false, false, GLFW_KEY_Z };
 
-	keyboard->UP    = { false, false, GLFW_KEY_UP };
-	keyboard->DOWN  = { false, false, GLFW_KEY_DOWN };
-	keyboard->LEFT  = { false, false, GLFW_KEY_LEFT };
-	keyboard->RIGHT = { false, false, GLFW_KEY_RIGHT };
-
-	keyboard->SHIFT = { false, false, GLFW_KEY_LEFT_SHIFT };
+	keyboard->ESC   = { false, false, GLFW_KEY_ESCAPE       };
+	keyboard->SPACE = { false, false, GLFW_KEY_SPACE        };
+	keyboard->SHIFT = { false, false, GLFW_KEY_LEFT_SHIFT   };
 	keyboard->CTRL  = { false, false, GLFW_KEY_LEFT_CONTROL };
+
+	keyboard->UP    = { false, false, GLFW_KEY_UP    };
+	keyboard->DOWN  = { false, false, GLFW_KEY_DOWN  };
+	keyboard->LEFT  = { false, false, GLFW_KEY_LEFT  };
+	keyboard->RIGHT = { false, false, GLFW_KEY_RIGHT };
 }
 void update_keyboard(Keyboard* keyboard, Window window)
 {

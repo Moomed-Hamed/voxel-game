@@ -58,8 +58,8 @@ int main()
 
 		player_update_dir(player, mouse.dx, mouse.dy);
 		if (keys.W.is_pressed) player_move(player, DIR_FORWARD , 10 * frame_time);
-		if (keys.A.is_pressed) player_move(player, DIR_BACKWARD, 10 * frame_time);
-		if (keys.S.is_pressed) player_move(player, DIR_LEFT    , 8  * frame_time);
+		if (keys.S.is_pressed) player_move(player, DIR_BACKWARD, 10 * frame_time);
+		if (keys.A.is_pressed) player_move(player, DIR_LEFT    , 8  * frame_time);
 		if (keys.D.is_pressed) player_move(player, DIR_RIGHT   , 8  * frame_time);
 		if (keys.SPACE.is_pressed && !keys.SPACE.was_pressed) player->velocity.y = 15;
 		player_update_pos(player, world->chunks, frame_time);
