@@ -1,3 +1,6 @@
+// Copyright (c) 2021 Mohamed Hamed
+// Intermediary version 9.7.21
+
 #pragma comment(lib, "winmm")
 #pragma comment(lib, "opengl32")
 #pragma comment(lib, "external/GLEW/glew32s")
