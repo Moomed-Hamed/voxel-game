@@ -16,5 +16,5 @@ void main()
 {
 	frag_position = vec4(vs_out.frag_pos, 0);
 	frag_normal   = vec4(vs_out.normal, 0);
-	frag_albedo   = vec4(1,0,0,0);
+	frag_albedo   = vec4(0,1,1,0);
 }

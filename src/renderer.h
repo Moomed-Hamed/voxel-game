@@ -3,10 +3,10 @@
 /* -- how 2 draw a mesh --
 
 	Shader shader = {};
-	load(shader, "vertex_shader", "fragment_shader");
+	load(&shader, "vertex_shader.vert", "fragment_shader.frag");
 
 	Drawable_Mesh mesh = {};
-	load(mesh, "mesh.model");
+	load(mesh, "object.mesh");
 	
 	bind(shader);
 	draw(mesh);
@@ -16,11 +16,8 @@ struct Shader { GLuint id; };
 
 void load(Shader* shader, const char* vert_path, const char* frag_path)
 {
-	uint vert_file_size = 0;
-	uint frag_file_size = 0;
-
-	char* vert_source = (char*)read_text_file_into_memory(vert_path, &vert_file_size);
-	char* frag_source = (char*)read_text_file_into_memory(frag_path, &frag_file_size);
+	char* vert_source = (char*)read_text_file_into_memory(vert_path);
+	char* frag_source = (char*)read_text_file_into_memory(frag_path);
 
 	GLuint vert_shader = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vert_shader, 1, &vert_source, NULL);
@@ -72,7 +69,7 @@ void free(Shader shader)
 	glDeleteShader(shader.id);
 }
 
-// make sure you bind the shader first!
+// make sure you bind a shader *before* calling these!
 void set_int  (Shader shader, const char* name, int value  )
 {
 	glUniform1i(glGetUniformLocation(shader.id, name), value);
@@ -254,23 +251,26 @@ void load(Drawable_Mesh_UV* mesh, const char* path, const char* texture_path, ui
 		glEnableVertexAttribArray(tex_attrib);
 	}
 
-	int width, height, num_channels;
-	byte* image;
+	if (texture_path)
+	{
+		int width, height, num_channels;
+		byte* image;
 
-	stbi_set_flip_vertically_on_load(true);
+		stbi_set_flip_vertically_on_load(true);
 
-	image = stbi_load(texture_path, &width, &height, &num_channels, 0);
+		image = stbi_load(texture_path, &width, &height, &num_channels, 0);
 
-	glGenTextures(1, &(mesh->texture_id));
-	glBindTexture(GL_TEXTURE_2D, mesh->texture_id);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glGenerateMipmap(GL_TEXTURE_2D);
+		glGenTextures(1, &(mesh->texture_id));
+		glBindTexture(GL_TEXTURE_2D, mesh->texture_id);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glGenerateMipmap(GL_TEXTURE_2D);
 
-	stbi_image_free(image);
+		stbi_image_free(image);
+	}
 }
 void update(Drawable_Mesh_UV mesh, uint vb_size, byte* vb_data)
 {
@@ -344,7 +344,7 @@ struct G_Buffer
 {
 	GLuint FBO; // frame buffer object
 	GLuint positions, normals, albedo; // textures
-	GLuint VAO, VBO, EBO;
+	GLuint VAO, VBO, EBO; // for drawing the quad
 };
 
 void init_g_buffer(G_Buffer* buf, Window window)
@@ -555,42 +555,4 @@ Shader make_lighting_shader()
 	set_float(lighting_shader, "spt_light.quadratic"   , 0.032f);
 
 	return lighting_shader;
-}
-
-// -- 3D Camera -- //
-
-#define DIR_FORWARD	0
-#define DIR_BACKWARD	1
-#define DIR_LEFT		2
-#define DIR_RIGHT	   3
-
-struct Camera
-{
-	vec3 position;
-	vec3 front, right, up;
-	float yaw, pitch;
-};
-
-void camera_update_dir(Camera* camera, float dx, float dy, float sensitivity = 0.003)
-{
-	camera->yaw   += (dx * sensitivity) / TWOPI;
-	camera->pitch += (dy * sensitivity) / TWOPI;
-
-	if (camera->pitch >  PI / 2.01) camera->pitch =  PI / 2.01;
-	if (camera->pitch < -PI / 2.01) camera->pitch = -PI / 2.01;
-
-	camera->front.y = sin(camera->pitch);
-	camera->front.x = cos(camera->pitch) * cos(camera->yaw);
-	camera->front.z = cos(camera->pitch) * sin(camera->yaw);
-
-	camera->front = normalize(camera->front);
-	camera->right = normalize(cross(camera->front, vec3(0, 1, 0)));
-	camera->up    = normalize(cross(camera->right, camera->front));
-}
-void camera_update_pos(Camera* camera, int direction, float distance)
-{
-	if (direction == DIR_FORWARD ) camera->position += camera->front * distance;
-	if (direction == DIR_LEFT    ) camera->position -= camera->right * distance;
-	if (direction == DIR_RIGHT   ) camera->position += camera->right * distance;
-	if (direction == DIR_BACKWARD) camera->position -= camera->front * distance;
 }

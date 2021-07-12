@@ -1,8 +1,19 @@
-#include "chunk.h"
+#include "asset.h"
 
 struct World
 {
-	Chunk chunks[NUM_ACTIVE_CHUNKS];
+	union
+	{
+		Chunk chunks[9 + 9];
+	
+		struct
+		{
+			Chunk active_chunks[9];
+			Chunk border_chunks[9];
+		};
+	};
+
+	Chunk_Renderer renderers[9];
 };
 
 void init(World* world, vec3 position)
@@ -11,75 +22,75 @@ void init(World* world, vec3 position)
 	uint offset_z = ( ((uint)position.z) & 0xFFF0 ) - 16;
 
 	uint i = 0;
-	for (uint x = 0; x < CHUNK_RENDER_DISTANCE; ++x) {
-	for (uint z = 0; z < CHUNK_RENDER_DISTANCE; ++z)
+	for (uint x = 0; x < 3; ++x) {
+	for (uint z = 0; z < 3; ++z)
 	{
 		uvec2 coords = uvec2((x * CHUNK_X) + offset_x, (z * CHUNK_Z) + offset_z);
 		world->chunks[i].coords = coords;
 		generate_chunk_terrain(&world->chunks[i]);
 		i++;
 	} }
+
+	for (uint i = 0; i < 9; i++) { init(world->renderers + i); }
 }
 
-// WARNING : this function needs alot of work
 void update(World* world, vec3 position)
 {
 	uint chunk_x =  (((uint)position.x) & 0xFFF0 ) - 16;
 	uint chunk_z =  (((uint)position.z) & 0xFFF0 ) - 16;
 
-	uint i = 0;
-	for (uint x = 0; x < CHUNK_RENDER_DISTANCE; ++x) {
-	for (uint z = 0; z < CHUNK_RENDER_DISTANCE; ++z)
+	static uvec2 last_coords = uvec2(0, 0);
+	
+	// rn i reload everything if we move to a new chunk
+	// later i'll move unloaded chunks to border chunks &
+	// only generate what we need
+	if (last_coords != uvec2(chunk_x, chunk_z))
 	{
-		uvec2 coords = uvec2((x * CHUNK_X) + chunk_x, (z * CHUNK_Z) + chunk_z);
+		uint offset_x = ( ((uint)position.x) & 0xFFF0 ) - 16;
+		uint offset_z = ( ((uint)position.z) & 0xFFF0 ) - 16;
 
-		bool exists = false;
-
-		for (int j = 0; j < NUM_ACTIVE_CHUNKS; ++j)
+		uint i = 0;
+		for (uint x = 0; x < 3; ++x) {
+		for (uint z = 0; z < 3; ++z)
 		{
-			if (world->chunks[j].coords == coords) exists = true;
-		}
-
-		if (exists == false)
-		{
-			world->chunks[i].coords = coords;
-			generate_chunk_terrain(&world->chunks[i]);
-		}
-
-		i++;
-	} }
-
-	/*void update(World* world, vec3 position)
-	{
-		uint chunk_x = ((uint)position.x) & 0xFFF0;
-		uint chunk_z = ((uint)position.z) & 0xFFF0;
-	
-		// coords of chunks that need to be generated
-		uvec2 new_coords[NUM_ACTIVE_CHUNKS] = {};
-	
-		uint count = 0;
-		for (uint x = 0; x < CHUNK_RENDER_DISTANCE; ++x) {
-		for (uint z = 0; z < CHUNK_RENDER_DISTANCE; ++z)
-		{
-			uvec2 coords = uvec2((x * CHUNK_X) + chunk_x, (z * CHUNK_Z) + chunk_z);
-	
-			bool exists = false;
-	
-			for (int j = 0; j < NUM_ACTIVE_CHUNKS; ++j)
-			{
-				if (world->chunks[j].coords == coords) exists = true;
-			}
-	
-			if (exists == false)
-			{
-				new_coords[count++] = uvec2((x * CHUNK_X) + chunk_x, (z * CHUNK_Z) + chunk_z);
-			}
+			uvec2 coords = uvec2((x * CHUNK_X) + offset_x, (z * CHUNK_Z) + offset_z);
+			world->active_chunks[i].coords = coords;
+			generate_chunk_terrain(&world->active_chunks[i]);
+			i++;
 		} }
-	
-		// if a chunk is found with inactive coords, replace it
-		//world->chunks[i].coords = coords;
-		//generate_chunk_terrain(&world->chunks[i]);
-	}*/
+	}
+
+	last_coords = uvec2(chunk_x, chunk_z);
+}
+
+// rendering
+
+void update_renderer(World* world, float dtime)
+{
+	for (uint i = 0; i < 9; i++)
+	{
+		update_renderer(world->renderers + i, world->active_chunks + i);
+	}
+}
+
+void draw(World* world, float dtime, mat4 proj_view)
+{
+	static float timer = 0; timer += .25 * dtime;
+
+	for (uint i = 0; i < 9; i++)
+	{
+		bind(world->renderers[i].solid_shader);
+		set_mat4(world->renderers[i].solid_shader, "proj_view", proj_view);
+		bind_texture(world->renderers[i].solid_mesh, 3);
+
+		draw(world->renderers[i].solid_mesh, world->renderers[i].num_solids);
+		
+		bind(world->renderers[i].fluid_shader);
+		set_mat4(world->renderers[i].fluid_shader, "proj_view", proj_view);
+		set_float(world->renderers[i].fluid_shader, "timer", timer);
+
+		draw(world->renderers[i].fluid_mesh, world->renderers[i].num_fluids);
+	}
 }
 
 void world_set_block(Chunk* chunks, vec3 pos, BlockID new_block)
@@ -170,7 +181,7 @@ BlockID world_break_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, vec3* break
 
 		if (test_block)
 		{
-			world_set_block(chunks, test_point, BLOCK::AIR);
+			world_set_block(chunks, test_point, BLOCK_AIR);
 
 			if (breakpos) // aaah! if statement slow! slow bad!
 			{
@@ -185,7 +196,7 @@ BlockID world_break_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, vec3* break
 		test_point += increment;
 	}
 
-	return BLOCK::AIR;
+	return BLOCK_AIR;
 }
 BlockID world_place_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, BlockID block, uvec3* place_pos = NULL)
 {
@@ -210,9 +221,8 @@ BlockID world_place_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, BlockID blo
 		test_point += increment;
 	}
 
-	return BLOCK::AIR;
+	return BLOCK_AIR;
 }
-// returns the position of where a block *would* be placed
 void world_get_place_pos_raycast(Chunk* chunks, vec3 pos, vec3 dir, uvec3* place_pos)
 {
 	vec3 increment = vec3(.2, .2, .2) * glm::normalize(dir);
@@ -225,7 +235,7 @@ void world_get_place_pos_raycast(Chunk* chunks, vec3 pos, vec3 dir, uvec3* place
 	{
 		if (world_get_block(chunks, test_point) && world_get_block(chunks, test_point) != INVALID)
 		{
-			*place_pos = uvec3(test_point - increment);
+			*place_pos = uvec3(test_point - increment); // position of where a block *would* be placed
 			return;
 		}
 
