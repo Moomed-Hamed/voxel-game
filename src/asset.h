@@ -40,7 +40,7 @@ struct Asset_Renderer
 
 void init(Asset_Renderer* renderer)
 {
-	load(&renderer->mesh, "assets/meshes/arms.mesh_uv", "assets/textures/palette.bmp", sizeof(renderer->assets));
+	load(&renderer->mesh, "assets/meshes/pickaxe.mesh_uv", "assets/textures/palette.bmp", sizeof(renderer->assets));
 	mesh_add_attrib_vec3(3, sizeof(Asset_Drawable), 0); // world pos
 	mesh_add_attrib_mat3(4, sizeof(Asset_Drawable), sizeof(vec3)); // rotation
 
