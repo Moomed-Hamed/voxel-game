@@ -1,9 +1,11 @@
 #version 330 core
+
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 tex_coord;
 layout (location = 3) in vec3 world_position;
 layout (location = 4) in mat3 rotation;
+layout (location = 7) in vec2 tex_offset;
 
 struct VS_OUT
 {
@@ -18,8 +20,8 @@ out VS_OUT vs_out;
 
 void main()
 {
-	vs_out.normal    = normal;
-	vs_out.frag_pos  = (rotation * position) + world_position;
-	vs_out.tex_coord = tex_coord;
+	vs_out.normal    = (rotation * normal);
+	vs_out.frag_pos  = (rotation * (position - vec3(.5,0,.5))) + world_position + vec3(.5,0,.5);
+	vs_out.tex_coord = tex_coord + tex_offset;
 	gl_Position      = proj_view * vec4(vs_out.frag_pos, 1.0);
 }

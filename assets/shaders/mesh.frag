@@ -4,6 +4,7 @@ struct VS_OUT
 {
 	vec3 normal;
 	vec3 frag_pos;
+	vec3 color;
 };
 
 in VS_OUT vs_out;
@@ -14,7 +15,7 @@ layout (location = 2) out vec4 frag_albedo;
 
 void main()
 {
-	frag_position = vec4(vs_out.frag_pos, 0);
-	frag_normal   = vec4(vs_out.normal, 0);
-	frag_albedo   = vec4(0,1,1,0);
+	frag_position = vec4(vs_out.frag_pos, 1.0); // metalness
+	frag_normal   = vec4(vs_out.normal  , 1.0); // roughness
+	frag_albedo   = vec4(vs_out.color   , 0.0); // ambient occlusion
 }

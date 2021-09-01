@@ -9,6 +9,7 @@
 #include <external/GLM/gtc/matrix_transform.hpp>
 #include <external/GLM/gtc/quaternion.hpp> //for quaternions
 #include <external/GLM/gtx/quaternion.hpp>
+#include <external/GLM/gtx/transform.hpp>
 using glm::vec2;  using glm::vec3; using glm::vec4;
 using glm::mat3;  using glm::mat4;
 using glm::quat;
@@ -50,11 +51,11 @@ typedef uint8 byte;
 mat3 point_at(vec3 dir, vec3 up)
 {
 	//Assumed to be normalized
-	vec3 f = dir * -1.f; //front
+	vec3 f = dir; //front
 	vec3 r = cross(up, f); //right
 	vec3 u = up;
 
-	glm::mat3 result(1);
+	mat3 result(1);
 	result[0][0] = r.x;
 	result[1][0] = r.y;
 	result[2][0] = r.z;
@@ -65,7 +66,7 @@ mat3 point_at(vec3 dir, vec3 up)
 	result[1][2] = f.y;
 	result[2][2] = f.z;
 
-	return glm::inverse(result);
+	return inverse(result);
 }
 
 //linearly interpolate between a0 and a1, Weight w should be in the range [0.0, 1.0]

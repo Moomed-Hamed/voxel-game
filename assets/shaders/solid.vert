@@ -18,8 +18,8 @@ out VS_OUT vs_out;
 
 void main()
 {
-	vs_out.normal = normal;
-	vs_out.frag_pos = position + world_position;
-	vs_out.tex_coord = vec2(tex_coord.x + tex_offset, tex_coord.y);
-	gl_Position = proj_view * vec4(vs_out.frag_pos, 1.0);
+	vs_out.normal    = normal;
+	vs_out.frag_pos  = position + world_position;
+	vs_out.tex_coord = tex_coord + vec2(tex_offset, 0);
+	gl_Position      = proj_view * vec4(vs_out.frag_pos, 1.0);
 }

@@ -2,8 +2,9 @@
 
 struct VS_OUT
 {
-	vec3 normal;   // normal vector
-	vec3 frag_pos; // position of this pixel in world space
+	vec3 normal;
+	vec3 frag_pos;
+	vec3 color;
 };
 
 layout (location = 0) in vec3 position;
@@ -33,6 +34,7 @@ void main()
 
 	vs_out.frag_pos  = pos;
 	vs_out.normal    = adjusted_normal;
+	vs_out.color = vec3(0, 0.203, 0.254); // this should be variable
 
 	gl_Position = proj_view * vec4(vs_out.frag_pos, 1.0);
 }

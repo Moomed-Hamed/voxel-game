@@ -1,0 +1,20 @@
+------------------------------
+enemy skeleton
+------------------------------
+0 : IDLE_1
+1 : IDLE_2
+2 : WALK_1
+3 : WALK_2
+4 : WALK_3
+5 : WALK_4
+6 : RUN_1
+7 : RUN_2
+8 : RUN_3
+9 : RUN_4
+10: DEAD
+
+IDLE : (IDLE_1 > IDLE_2)
+WALK : (WALK_1 > WALK_2 > WALK_3 > WALK_4)
+RUN  : (RUN_1> RUN_2 > RUN_3 > RUN_4)
+DIE  : (DEAD)
+------------------------------

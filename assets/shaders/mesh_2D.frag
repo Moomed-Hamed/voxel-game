@@ -2,8 +2,7 @@
 
 struct VS_OUT
 {
-	vec3 normal;
-	vec3 frag_pos;
+	vec2 frag_pos;
 	vec3 color;
 };
 
@@ -15,7 +14,7 @@ layout (location = 2) out vec4 frag_albedo;
 
 void main()
 {
-	frag_position = vec4(vs_out.frag_pos, 0);
-	frag_normal   = vec4(vs_out.normal  , 0);
+	frag_position = vec4(vs_out.frag_pos, 0, 0);
+	frag_normal   = vec4(0, 0, 1, 0);
 	frag_albedo   = vec4(vs_out.color   , 0);
 }

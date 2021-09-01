@@ -1,13 +1,13 @@
-#include "window_and_input.h"
+#include "window.h"
 
 /* -- how 2 draw a mesh --
-
-	Shader shader = {};
-	load(&shader, "vertex_shader.vert", "fragment_shader.frag");
 
 	Drawable_Mesh mesh = {};
 	load(mesh, "object.mesh");
 	
+	Shader shader = {};
+	load(&shader, "vertex_shader.vert", "fragment_shader.frag");
+
 	bind(shader);
 	draw(mesh);
 */
@@ -57,6 +57,11 @@ void load(Shader* shader, const char* vert_path, const char* frag_path)
 	glAttachShader(shader->id, frag_shader);
 	glLinkProgram (shader->id);
 
+	GLsizei length = 0;
+	char error[256] = {};
+	glGetProgramInfoLog(shader->id, 256, &length, error);
+	if(length > 0) out(error);
+
 	glDeleteShader(vert_shader);
 	glDeleteShader(frag_shader);
 }
@@ -87,6 +92,30 @@ void set_mat4 (Shader shader, const char* name, mat4 value )
 	glUniformMatrix4fv(glGetUniformLocation(shader.id, name), 1, GL_FALSE, (float*)&value);
 }
 
+GLuint load_texture(const char* path)
+{
+	GLuint id = {};
+	int width, height, num_channels;
+	byte* image;
+
+	stbi_set_flip_vertically_on_load(true);
+
+	image = stbi_load(path, &width, &height, &num_channels, 0);
+
+	glGenTextures(1, &id);
+	glBindTexture(GL_TEXTURE_2D, id);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	stbi_image_free(image);
+
+	return id;
+}
+
 struct Mesh_Data
 {
 	uint num_vertices, num_indices;
@@ -104,6 +133,29 @@ struct Mesh_Data_UV
 	vec3* normals;
 	vec2* textures;
 	uint* indices;
+};
+
+struct Mesh_Data_Anim
+{
+	uint num_vertices, num_indices;
+
+	vec3*  positions;
+	vec3*  normals;
+	vec3*  weights;
+	ivec3* bones;
+	uint*  indices;
+};
+
+struct Mesh_Data_Anim_UV
+{
+	uint num_vertices, num_indices;
+
+	vec3*  positions;
+	vec3*  normals;
+	vec2*  textures;
+	vec3*  weights;
+	ivec3* bones;
+	uint*  indices;
 };
 
 void load(Mesh_Data* data, const char* path)
@@ -142,6 +194,62 @@ void load(Mesh_Data_UV* data, const char* path)
 
 	fclose(mesh_file);
 }
+void load(Mesh_Data_Anim* data, const char* path)
+{
+	FILE* mesh_file = fopen(path, "rb");
+	if (!mesh_file) { print("could not open mesh file: %s\n", path); stop; return; }
+
+	fread(&data->num_vertices, sizeof(uint), 1, mesh_file);
+	fread(&data->num_indices , sizeof(uint), 1, mesh_file);
+
+	data->positions = (vec3*) calloc(data->num_vertices, sizeof(vec3));
+	data->normals   = (vec3*) calloc(data->num_vertices, sizeof(vec3));
+	data->weights   = (vec3*) calloc(data->num_vertices, sizeof(vec3));
+	data->bones     = (ivec3*)calloc(data->num_vertices, sizeof(ivec3));
+	data->indices   = (uint*) calloc(data->num_indices , sizeof(uint));
+
+	fread(data->positions, sizeof(vec3) , data->num_vertices, mesh_file);
+	fread(data->normals  , sizeof(vec3) , data->num_vertices, mesh_file);
+	fread(data->weights  , sizeof(vec3) , data->num_vertices, mesh_file);
+	fread(data->bones    , sizeof(ivec3), data->num_vertices, mesh_file);
+	fread(data->indices  , sizeof(uint) , data->num_indices , mesh_file);
+
+	fclose(mesh_file);
+}
+void load(Mesh_Data_Anim_UV* data, const char* path)
+{
+	FILE* mesh_file = fopen(path, "rb");
+	if (!mesh_file) { print("could not open mesh file: %s\n", path); stop; return; }
+
+	fread(&data->num_vertices, sizeof(uint), 1, mesh_file);
+	fread(&data->num_indices , sizeof(uint), 1, mesh_file);
+
+	data->positions = (vec3*) calloc(data->num_vertices, sizeof(vec3));
+	data->normals   = (vec3*) calloc(data->num_vertices, sizeof(vec3));
+	data->weights   = (vec3*) calloc(data->num_vertices, sizeof(vec3));
+	data->bones     = (ivec3*)calloc(data->num_vertices, sizeof(ivec3));
+	data->textures  = (vec2*) calloc(data->num_vertices, sizeof(vec2));
+	data->indices   = (uint*) calloc(data->num_indices , sizeof(uint));
+
+	fread(data->positions, sizeof(vec3) , data->num_vertices, mesh_file);
+	fread(data->normals  , sizeof(vec3) , data->num_vertices, mesh_file);
+	fread(data->weights  , sizeof(vec3) , data->num_vertices, mesh_file);
+	fread(data->bones    , sizeof(ivec3), data->num_vertices, mesh_file);
+	fread(data->textures , sizeof(vec2) , data->num_vertices, mesh_file);
+	fread(data->indices  , sizeof(uint) , data->num_indices , mesh_file);
+
+	//for (int i = 0; i < data->num_vertices; i++)
+	//{
+	//	printvec(data->positions[i]);
+	//	printvec(data->normals[i]);
+	//	printvec(data->weights[i]);
+	//	printvec(data->bones[i]);
+	//	out(data->textures[i].x << ',' << data->textures[i].y);
+	//	//stop;
+	//}
+
+	fclose(mesh_file);
+}
 
 struct Drawable_Mesh
 {
@@ -152,7 +260,19 @@ struct Drawable_Mesh
 struct Drawable_Mesh_UV
 {
 	GLuint VAO, VBO, EBO;
-	uint num_indices, texture_id;
+	uint num_indices, texture_id, material_id;
+};
+
+struct Drawable_Mesh_Anim
+{
+	GLuint VAO, VBO, EBO, UBO;
+	uint num_indices;
+};
+
+struct Drawable_Mesh_Anim_UV
+{
+	GLuint VAO, VBO, EBO, UBO;
+	uint num_indices, texture_id, material_id;
 };
 
 void load(Drawable_Mesh* mesh, const char* path, uint reserved_mem_size = 0)
@@ -205,7 +325,7 @@ void draw(Drawable_Mesh mesh, uint num_instances)
 	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
 }
 
-void load(Drawable_Mesh_UV* mesh, const char* path, const char* texture_path, uint reserved_mem_size)
+void load(Drawable_Mesh_UV* mesh, const char* path, uint reserved_mem_size)
 {
 	Mesh_Data_UV mesh_data = {};
 	load(&mesh_data, path);
@@ -250,27 +370,6 @@ void load(Drawable_Mesh_UV* mesh, const char* path, const char* texture_path, ui
 		glVertexAttribPointer(tex_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)offset);
 		glEnableVertexAttribArray(tex_attrib);
 	}
-
-	if (texture_path)
-	{
-		int width, height, num_channels;
-		byte* image;
-
-		stbi_set_flip_vertically_on_load(true);
-
-		image = stbi_load(texture_path, &width, &height, &num_channels, 0);
-
-		glGenTextures(1, &(mesh->texture_id));
-		glBindTexture(GL_TEXTURE_2D, mesh->texture_id);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		stbi_image_free(image);
-	}
 }
 void update(Drawable_Mesh_UV mesh, uint vb_size, byte* vb_data)
 {
@@ -281,8 +380,169 @@ void bind_texture(Drawable_Mesh_UV mesh, uint texture_unit = 0)
 {
 	glActiveTexture(GL_TEXTURE0 + texture_unit);
 	glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
+
+	glActiveTexture(GL_TEXTURE1 + texture_unit);
+	glBindTexture(GL_TEXTURE_2D, mesh.material_id);
 }
 void draw(Drawable_Mesh_UV mesh, uint num_instances = 1)
+{
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
+}
+
+void load(Drawable_Mesh_Anim* mesh, const char* path, uint reserved_mem_size = 0)
+{
+	Mesh_Data_Anim mesh_data;
+	load(&mesh_data, path);
+	mesh->num_indices = mesh_data.num_indices;
+
+	glGenVertexArrays(1, &(mesh->VAO));
+	glBindVertexArray(mesh->VAO);
+
+	uint vertmemsize = mesh_data.num_vertices * sizeof(vec3);
+	uint bonememsize = mesh_data.num_vertices * sizeof(ivec3);
+	uint offset = reserved_mem_size;
+
+#define RENDER_MEM_SIZE (reserved_mem_size + (vertmemsize + vertmemsize + vertmemsize + bonememsize)) // positions, normals, weights, and bones
+	glGenBuffers(1, &(mesh->VBO));
+	glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
+	glBufferData(GL_ARRAY_BUFFER, RENDER_MEM_SIZE, NULL, GL_STATIC_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 0), vertmemsize, mesh_data.positions);
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 1), vertmemsize, mesh_data.normals  );
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 2), vertmemsize, mesh_data.weights  );
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 3), bonememsize, mesh_data.bones    );
+#undef RENDER_MEM_SIZE
+
+	glGenBuffers(1, &(mesh->EBO));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh_data.num_indices * sizeof(uint), mesh_data.indices, GL_STATIC_DRAW);
+
+	free(mesh_data.positions);
+	free(mesh_data.normals);
+	free(mesh_data.weights);
+	free(mesh_data.bones);
+	free(mesh_data.indices);
+
+	offset = reserved_mem_size;
+	{
+		GLint pos_attrib = 0; // position of a vertex
+		glVertexAttribPointer(pos_attrib, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)(offset + (vertmemsize * 0)));
+		glEnableVertexAttribArray(pos_attrib);
+
+		GLint norm_attrib = 1; // normal of a vertex
+		glVertexAttribPointer(norm_attrib, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)(offset + (vertmemsize * 1)));
+		glEnableVertexAttribArray(norm_attrib);
+
+		GLint weight_attrib = 2; // weights of bone influence
+		glVertexAttribPointer(weight_attrib, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)(offset + (vertmemsize * 2)));
+		glEnableVertexAttribArray(weight_attrib);
+
+		GLint bone_attrib = 3; // id's of 3 bones that influence this vertex
+		glVertexAttribIPointer(bone_attrib, 3, GL_INT, sizeof(ivec3), (void*)(offset + (vertmemsize * 3)));
+		glEnableVertexAttribArray(bone_attrib);
+	}
+
+	glGenBuffers(1, &mesh->UBO);
+	glBindBuffer(GL_UNIFORM_BUFFER, mesh->UBO);
+	glBufferData(GL_UNIFORM_BUFFER, 16 * sizeof(mat4), NULL, GL_DYNAMIC_DRAW); // WARNING MAX JOINTS HARDCODED IN AS 16
+
+	//glBindBufferRange(GL_UNIFORM_BUFFER, 0, renderdata->UBO, 0, model_data.num_joints * sizeof(glm::mat4));
+	glBindBufferBase(GL_UNIFORM_BUFFER, 0, mesh->UBO);
+}
+void update(Drawable_Mesh_Anim mesh, uint num_bones, mat4* pose, uint vb_size, byte* vb_data)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+
+	glBindBuffer(GL_UNIFORM_BUFFER, mesh.UBO);
+	glBufferSubData(GL_UNIFORM_BUFFER, 0, num_bones * sizeof(mat4), pose);
+}
+void draw(Drawable_Mesh_Anim mesh, uint num_instances = 1)
+{
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
+}
+
+void load(Drawable_Mesh_Anim_UV* mesh, const char* path, uint reserved_mem_size = 0)
+{
+	Mesh_Data_Anim_UV mesh_data;
+	load(&mesh_data, path);
+	mesh->num_indices = mesh_data.num_indices;
+
+	glGenVertexArrays(1, &(mesh->VAO));
+	glBindVertexArray(mesh->VAO);
+
+	uint vertmemsize = mesh_data.num_vertices * sizeof(vec3);
+	uint bonememsize = mesh_data.num_vertices * sizeof(ivec3);
+	uint texmemsize  = mesh_data.num_vertices * sizeof(vec2);
+	uint offset = reserved_mem_size;
+
+#define RENDER_MEM_SIZE (reserved_mem_size + (vertmemsize + vertmemsize + vertmemsize + bonememsize + texmemsize)) // positions, normals, weights, bones, and textures
+	glGenBuffers(1, &(mesh->VBO));
+	glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
+	glBufferData(GL_ARRAY_BUFFER, RENDER_MEM_SIZE, NULL, GL_STATIC_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 0), vertmemsize, mesh_data.positions);
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 1), vertmemsize, mesh_data.normals  );
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 2), vertmemsize, mesh_data.weights  );
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 3), bonememsize, mesh_data.bones    );
+	glBufferSubData(GL_ARRAY_BUFFER, offset + (vertmemsize * 3) + bonememsize, texmemsize , mesh_data.textures );
+#undef RENDER_MEM_SIZE
+
+	glGenBuffers(1, &(mesh->EBO));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh_data.num_indices * sizeof(uint), mesh_data.indices, GL_STATIC_DRAW);
+
+	free(mesh_data.positions);
+	free(mesh_data.normals);
+	free(mesh_data.textures);
+	free(mesh_data.weights);
+	free(mesh_data.bones);
+	free(mesh_data.indices);
+
+	offset = reserved_mem_size;
+	{
+		GLint pos_attrib = 0; // position of a vertex
+		glVertexAttribPointer(pos_attrib, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)(offset + (vertmemsize * 0)));
+		glEnableVertexAttribArray(pos_attrib);
+
+		GLint norm_attrib = 1; // normal of a vertex
+		glVertexAttribPointer(norm_attrib, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)(offset + (vertmemsize * 1)));
+		glEnableVertexAttribArray(norm_attrib);
+
+		GLint weight_attrib = 2; // weights of bone influence
+		glVertexAttribPointer(weight_attrib, 3, GL_FLOAT, GL_FALSE, sizeof(vec3), (void*)(offset + (vertmemsize * 2)));
+		glEnableVertexAttribArray(weight_attrib);
+
+		GLint bone_attrib = 3; // id's of 3 bones that influence this vertex
+		glVertexAttribIPointer(bone_attrib, 3, GL_INT, sizeof(ivec3), (void*)(offset + (vertmemsize * 3)));
+		glEnableVertexAttribArray(bone_attrib);
+
+		GLint texture_attrib = 4; // texture coordinates of a vertex
+		glVertexAttribPointer(texture_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)(offset + (vertmemsize * 3) + bonememsize));
+		glEnableVertexAttribArray(texture_attrib);
+	}
+
+	glGenBuffers(1, &mesh->UBO);
+	glBindBuffer(GL_UNIFORM_BUFFER, mesh->UBO);
+	glBufferData(GL_UNIFORM_BUFFER, 16 * sizeof(mat4), NULL, GL_DYNAMIC_DRAW); // WARNING MAX JOINTS HARDCODED IN AS 16
+
+	//glBindBufferRange(GL_UNIFORM_BUFFER, 0, renderdata->UBO, 0, model_data.num_joints * sizeof(glm::mat4));
+	glBindBufferBase(GL_UNIFORM_BUFFER, 0, mesh->UBO);
+}
+void update(Drawable_Mesh_Anim_UV mesh, uint num_bones, mat4* pose, uint vb_size, byte* vb_data)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+
+	glBindBuffer(GL_UNIFORM_BUFFER, mesh.UBO);
+	glBufferSubData(GL_UNIFORM_BUFFER, 0, num_bones * sizeof(mat4), pose);
+}
+void bind_texture(Drawable_Mesh_Anim_UV mesh, uint texture_unit = 0)
+{
+	glActiveTexture(GL_TEXTURE0 + texture_unit);
+	glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
+}
+void draw(Drawable_Mesh_Anim_UV mesh, uint num_instances = 1)
 {
 	glBindVertexArray(mesh.VAO);
 	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
@@ -364,14 +624,14 @@ void init_g_buffer(G_Buffer* buf, Window window)
 	// normal color buffer
 	glGenTextures(1, &g_normals);
 	glBindTexture(GL_TEXTURE_2D, g_normals);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, window.screen_width, window.screen_height, 0, GL_RGBA, GL_FLOAT, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window.screen_width, window.screen_height, 0, GL_RGBA, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	// albedo color buffer
 	glGenTextures(1, &g_albedo);
 	glBindTexture(GL_TEXTURE_2D, g_albedo);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, window.screen_width, window.screen_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window.screen_width, window.screen_height, 0, GL_RGBA, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -453,60 +713,29 @@ void draw_g_buffer(G_Buffer g_buffer)
 
 /* -- deferred rendering cheat sheet --
 
-	Position texture = 0
-	Normal   texture = 1
-	Albedo   texture = 2
+	position texture = 0
+	normal   texture = 1
+	albedo   texture = 2
 
 	GL_FRAMEBUFFER = 0 for default framebuffer
 */
 
 struct Point_Light
 {
-	vec3 position;
-	vec3 color;
-	float linear, quadratic;
+	vec3 position, color;
+	float intensity;
 };
 
 struct Spot_Light
 {
-	vec3 position;
-	vec3 direction;
+	vec3 position, direction, color;
 	float inner_cuttof, outer_cuttof;
-	vec3 color;
-	float linear, quadratic;
-};
-
-struct Directional_Light
-{
-	vec3 direction;
-	vec3 color;
-	float linear, quadratic;
-};
-
-struct Point_Light_Drawable
-{
-	Shader shader;
-	Drawable_Mesh mesh;
-};
-
-struct Spot_Light_Drawable
-{
-	Shader shader;
-	Drawable_Mesh mesh;
-};
-
-struct Directional_Light_Drawable
-{
-	Shader shader;
-	Drawable_Mesh mesh;
 };
 
 struct Light_Renderer
 {
-	uint num_point_lights, num_spot_lights, num_directional_lights;
-	Point_Light_Drawable* point_lights;
-	Spot_Light_Drawable* spot_lights;
-	Directional_Light_Drawable* directional_lights;
+	Point_Light* point_lights;
+	Spot_Light*  spot_lights;
 };
 
 void init(Light_Renderer* renderer)
@@ -523,36 +752,344 @@ Shader make_lighting_shader()
 	set_int(lighting_shader, "positions", 0);
 	set_int(lighting_shader, "normals"  , 1);
 	set_int(lighting_shader, "albedo"   , 2);
-	
-	// Directional Lighting
-	vec3 light_direction = vec3(-1, -1, -1);
-	set_vec3(lighting_shader, "dir_light.direction", light_direction);
-	set_vec3(lighting_shader, "dir_light.direction", light_direction);
-	set_vec3(lighting_shader, "dir_light.ambient"  , vec3(0.2f, 0.2f, 0.2f));
-	set_vec3(lighting_shader, "dir_light.diffuse"  , vec3(0.5f, 0.5f, 0.5f));
-	set_vec3(lighting_shader, "dir_light.specular" , vec3(1.0f, 1.0f, 1.0f));
-	
-	// Point Lights
-	vec3 light_position = vec3(8, 65, 8);
-	set_vec3 (lighting_shader, "pt_light.position" , light_position);
-	set_vec3 (lighting_shader, "pt_light.ambient"  , vec3(0.2f, 0.2f, 0.2f));
-	set_vec3 (lighting_shader, "pt_light.diffuse"  , vec3(0.5f, 0.5f, 0.5f));
-	set_vec3 (lighting_shader, "pt_light.specular" , vec3(1.0f, 1.0f, 1.0f));
-	set_float(lighting_shader, "pt_light.linear"   , 0.09f);
-	set_float(lighting_shader, "pt_light.quadratic", 0.032f);
-	
-	// Spot Lights
-	float spt_light_cutoff_inner = cos(ToRadians(12.5f));
-	float spt_light_cutoff_outer = cos(ToRadians(17.5f));
-	set_vec3 (lighting_shader, "spt_light.position"    , vec3(2, 1.5, 2));
-	set_vec3 (lighting_shader, "spt_light.direction"   , vec3(2, 1.5, 2));
-	set_float(lighting_shader, "spt_light.inner_cutoff", spt_light_cutoff_inner);
-	set_float(lighting_shader, "spt_light.outer_cutoff", spt_light_cutoff_outer);
-	set_vec3 (lighting_shader, "spt_light.ambient"     , vec3(.001, 0, 0));
-	set_vec3 (lighting_shader, "spt_light.diffuse"     , vec3(1, 0, 0));
-	set_vec3 (lighting_shader, "spt_light.specular"    , vec3(1, 0, 0));
-	set_float(lighting_shader, "spt_light.linear"      , 0.01f);
-	set_float(lighting_shader, "spt_light.quadratic"   , 0.032f);
+
+	vec3 light_positions[4] = {vec3(5.00, .150, 0.00), vec3(-3, 1, 2), vec3(0, 4, 0), vec3(-1,.2,-1) };
+	vec3 light_colors[4]    = {vec3(.905, .568, .113), vec3(1 , 0, 1), vec3(1, 1, 1), vec3(0 , 0, 1) };
+
+	set_vec3(lighting_shader, "light_positions[0]", light_positions[0]);
+	set_vec3(lighting_shader, "light_positions[1]", light_positions[1]);
+	set_vec3(lighting_shader, "light_positions[2]", light_positions[2]);
+	set_vec3(lighting_shader, "light_positions[3]", light_positions[3]);
+
+	set_vec3(lighting_shader, "light_colors[0]", light_colors[0]);
+	set_vec3(lighting_shader, "light_colors[1]", light_colors[1]);
+	set_vec3(lighting_shader, "light_colors[2]", light_colors[2]);
+	set_vec3(lighting_shader, "light_colors[3]", light_colors[3]);
 
 	return lighting_shader;
+}
+
+// 2D rendering
+
+struct Drawable_Mesh_2D
+{
+	GLuint VAO, VBO, EBO;
+};
+
+struct Drawable_Mesh_2D_UV
+{
+	GLuint VAO, VBO, EBO;
+	GLuint texture_id;
+};
+
+void init(Drawable_Mesh_2D* mesh, uint reserved_mem_size = 0)
+{
+	float verts[] = {
+		// X     Y
+		-1.f, -1.f, // 0  1-------3
+		-1.f,  1.f, // 1  |       |
+		 1.f, -1.f, // 2  |       |
+		 1.f,  1.f  // 3  0-------2
+	};
+
+	uint indicies[] = {
+		0,2,3,
+		3,1,0
+	};
+
+	uint offset = reserved_mem_size;
+
+	glGenVertexArrays(1, &mesh->VAO);
+	glBindVertexArray(mesh->VAO);
+
+#define RENDER_MEM_SIZE (reserved_mem_size + sizeof(verts))
+	glGenBuffers(1, &mesh->VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
+	glBufferData(GL_ARRAY_BUFFER, RENDER_MEM_SIZE, NULL, GL_STATIC_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(verts), verts);
+#undef RENDER_MEM_SIZE
+
+	glGenBuffers(1, &mesh->EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indicies), indicies, GL_STATIC_DRAW);
+
+	offset = reserved_mem_size;
+	{
+		GLint vert_attrib = 0; // position of a vertex
+		glVertexAttribPointer(vert_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)offset);
+		glEnableVertexAttribArray(vert_attrib);
+	}
+}
+void update(Drawable_Mesh_2D mesh, uint vb_size = NULL, byte* vb_data = NULL)
+{
+	if (vb_size > 0)
+	{
+		glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+	}
+}
+void draw(Drawable_Mesh_2D mesh, uint num_instances = 1)
+{
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, num_instances);
+}
+
+void init(Drawable_Mesh_2D_UV* mesh, const char* texture_path, uint reserved_mem_size = 0)
+{
+	float verts[] = {
+		// X     Y
+		-1.f, -1.f, // 0  1-------3
+		-1.f,  1.f, // 1  |       |
+		 1.f, -1.f, // 2  |       |
+		 1.f,  1.f  // 3  0-------2
+	};
+
+	uint indicies[] = {
+		0,2,3,
+		3,1,0
+	};
+
+	uint offset = reserved_mem_size;
+
+	glGenVertexArrays(1, &mesh->VAO);
+	glBindVertexArray(mesh->VAO);
+
+#define RENDER_MEM_SIZE (reserved_mem_size + sizeof(verts))
+	glGenBuffers(1, &mesh->VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
+	glBufferData(GL_ARRAY_BUFFER, RENDER_MEM_SIZE, NULL, GL_STATIC_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(verts), verts);
+#undef RENDER_MEM_SIZE
+
+	glGenBuffers(1, &mesh->EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indicies), indicies, GL_STATIC_DRAW);
+
+	offset = reserved_mem_size;
+	{
+		GLint vert_attrib = 0; // position of a vertex
+		glVertexAttribPointer(vert_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)offset);
+		glEnableVertexAttribArray(vert_attrib);
+	}
+
+	if (texture_path)
+	{
+		int width, height, num_channels;
+		byte* image;
+
+		stbi_set_flip_vertically_on_load(true);
+
+		image = stbi_load(texture_path, &width, &height, &num_channels, 0);
+
+		glGenTextures(1, &(mesh->texture_id));
+		glBindTexture(GL_TEXTURE_2D, mesh->texture_id);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		stbi_image_free(image);
+	}
+}
+void update(Drawable_Mesh_2D_UV mesh, uint vb_size = NULL, byte* vb_data = NULL)
+{
+	if (vb_size > 0)
+	{
+		glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+	}
+}
+void bind_texture(Drawable_Mesh_2D_UV mesh, uint texture_unit = 0)
+{
+	glActiveTexture(GL_TEXTURE0 + texture_unit);
+	glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
+}
+void draw(Drawable_Mesh_2D_UV mesh, uint num_instances = 1)
+{
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, num_instances);
+}
+
+// animation
+
+#define MAX_ANIMATED_BONES 16
+
+struct Animation
+{
+	uint num_bones, num_frames;
+
+	mat4  ibm[MAX_ANIMATED_BONES]; // inverse-bind matrices
+	mat4* keyframes[MAX_ANIMATED_BONES];
+	int parents[MAX_ANIMATED_BONES]; // indices of parent bones
+};
+
+void load(Animation* anim, const char* path)
+{
+	*anim = {};
+	
+	FILE* read = fopen(path, "rb");
+	if (!read) { print("could not open animation file: %s\n", path); stop; return; }
+
+	// skeleton
+	fread(&anim->num_bones, sizeof(uint), 1, read);
+	fread(anim->parents   , sizeof(uint), anim->num_bones, read);
+	fread(anim->ibm       , sizeof(mat4), anim->num_bones, read);
+
+	// animation keyframes
+	fread(&anim->num_frames, sizeof(uint), 1, read);
+	for (int i = 0; i < anim->num_bones; i++)
+	{
+		anim->keyframes[i] = Alloc(mat4, anim->num_frames);
+		fread(anim->keyframes[i], sizeof(mat4), anim->num_frames, read);
+	}
+
+	fclose(read);
+}
+void update_pose(Animation* anim, mat4* poses, uint frame_1, uint frame_2, float mix)
+{
+	mat4* keyframes = Alloc(mat4, anim->num_bones);
+
+	for (uint i = 0; i < anim->num_bones; i++)
+	{
+		keyframes[i] = lerp(anim->keyframes[i][frame_1], anim->keyframes[i][frame_2], mix);
+	}
+
+	poses[0] = keyframes[0];
+	for (uint i = 1; i < anim->num_bones; ++i)
+	{
+		poses[i] = keyframes[i] * poses[anim->parents[i]];
+	}
+
+	for (uint i = 0; i < anim->num_bones; ++i)
+	{
+		poses[i] = anim->ibm[i] * poses[i];
+	}
+
+	free(keyframes);
+}
+
+// camera
+
+#define DIR_FORWARD	0
+#define DIR_BACKWARD	1
+#define DIR_LEFT	2
+#define DIR_RIGHT	3
+
+struct Camera
+{
+	vec3 position;
+	vec3 front, right, up;
+	float yaw, pitch;
+	float trauma;
+};
+
+void camera_update_dir(Camera* camera, float dx, float dy, float dtime, float sensitivity = 0.003)
+{
+	// camera shake
+	float trauma = camera->trauma;
+
+	static uint offset = random_uint() % 16;
+
+	if (camera->trauma > 1) camera->trauma = 1;
+	if (camera->trauma > 0) camera->trauma -= dtime;
+	else
+	{
+		camera->trauma = 0;
+		offset = random_uint() % 16;
+	}
+
+	float p1 = ((perlin((trauma + offset + 0) * 1000) * 2) - 1) * trauma;
+	float p2 = ((perlin((trauma + offset + 1) * 2000) * 2) - 1) * trauma;
+	float p3 = ((perlin((trauma + offset + 2) * 3000) * 2) - 1) * trauma;
+
+	float shake_yaw   = ToRadians(p1);
+	float shake_pitch = ToRadians(p2);
+	float shake_roll  = ToRadians(p3);
+
+	camera->yaw   += (dx * sensitivity) / TWOPI;
+	camera->pitch += (dy * sensitivity) / TWOPI;
+
+	float yaw   = camera->yaw + shake_yaw;
+	float pitch = camera->pitch + shake_pitch;
+
+	// it feels a little different (better?) if we let the shake actually move the camera a little
+	//camera->yaw   += shake_yaw;
+	//camera->pitch += shake_pitch;
+
+	// updating camera direction
+	if (camera->pitch >  PI / 2.01) camera->pitch =  PI / 2.01;
+	if (camera->pitch < -PI / 2.01) camera->pitch = -PI / 2.01;
+
+	camera->front.y = sin(pitch);
+	camera->front.x = cos(pitch) * cos(yaw);
+	camera->front.z = cos(pitch) * sin(yaw);
+
+	camera->front = normalize(camera->front);
+	camera->right = normalize(cross(camera->front, vec3(0, 1, 0)));
+	camera->up    = normalize(cross(camera->right, camera->front));
+
+	mat3 roll = glm::rotate(shake_roll, camera->front);
+	camera->up = roll * camera->up;
+}
+void camera_update_pos(Camera* camera, int direction, float distance)
+{
+	if (direction == DIR_FORWARD ) camera->position += camera->front * distance;
+	if (direction == DIR_LEFT    ) camera->position -= camera->right * distance;
+	if (direction == DIR_RIGHT   ) camera->position += camera->right * distance;
+	if (direction == DIR_BACKWARD) camera->position -= camera->front * distance;
+}
+
+// crosshair rendering
+
+struct Quad_Drawable
+{
+	vec2 position;
+	vec2 scale;
+	vec3 color;
+};
+
+struct Crosshair_Renderer
+{
+	Quad_Drawable quads[4];
+	Drawable_Mesh_2D mesh;
+	Shader shader;
+};
+
+void init(Crosshair_Renderer* renderer)
+{
+	*renderer = {};
+	init(&renderer->mesh, 4 * sizeof(Quad_Drawable));
+	mesh_add_attrib_vec2(1, sizeof(Quad_Drawable), 0); // position
+	mesh_add_attrib_vec2(2, sizeof(Quad_Drawable), sizeof(vec2)); // scale
+	mesh_add_attrib_vec3(3, sizeof(Quad_Drawable), sizeof(vec2) + sizeof(vec2)); // color
+
+	load(&renderer->shader, "assets/shaders/mesh_2D.vert", "assets/shaders/mesh_2D.frag");
+
+	vec2 position = vec2(0, 0);
+	vec2 scale = vec2(.003, .005) / 2.f;
+	vec3 color = vec3(1, 0, 0);
+
+	renderer->quads[0].position = position + vec2(.006f, 0);
+	renderer->quads[0].scale = scale;
+	renderer->quads[0].color = color;
+	renderer->quads[1].position = position - vec2(.006f, 0);
+	renderer->quads[1].scale = scale;
+	renderer->quads[1].color = color;
+	renderer->quads[2].position = position + vec2(0, .01f);
+	renderer->quads[2].scale = scale;
+	renderer->quads[2].color = color;
+	renderer->quads[3].position = position - vec2(0, .01f);
+	renderer->quads[3].scale = scale;
+	renderer->quads[3].color = color;
+}
+void update(Crosshair_Renderer* renderer)
+{
+	update(renderer->mesh, 4 * sizeof(Quad_Drawable), (byte*)renderer->quads);
+}
+void draw(Crosshair_Renderer* renderer)
+{
+	bind(renderer->shader);
+	draw(renderer->mesh, 4);
 }
