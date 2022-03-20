@@ -1,95 +1,305 @@
-#include "blocks.h"
+#include "particles.h"
+
+#define NUM_CHUNKS (7 * 7)
+#define NUM_ACTIVE_CHUNKS (3 * 3)
+#define NUM_BORDER_CHUNKS ((5 * 5) - NUM_ACTIVE_CHUNKS)
+#define NUM_PRIMED_CHUNKS ((7 * 7) - (5 * 5))
 
 #define CHUNK_X 16
 #define CHUNK_Z 16
-#define CHUNK_Y 256
+#define CHUNK_Y 128
 
-#define NUM_ACTIVE_CHUNKS 9 // rendered & simulated
-#define NUM_BORDER_CHUNKS 9 // rendered & less simulated
-
-#define CHUNK_BLOCK_INDEX(x,y,z) (((x) + (CHUNK_X * (z))) + ((CHUNK_X * CHUNK_Z) * (y)))
 #define NUM_CHUNK_BLOCKS (CHUNK_X * CHUNK_Z * CHUNK_Y)
+#define BLOCK_INDEX(x,y,z,i) ((((x) + (CHUNK_X * (z))) + ((CHUNK_X * CHUNK_Z) * (y))) + (NUM_CHUNK_BLOCKS * i))
+
+#define BLOCK_AIR	0
+
+// symmetrical blocks
+#define BLOCK_STONE	1
+#define BLOCK_DIRT	2
+#define BLOCK_GRASS	3
+#define BLOCK_SAND	4
+#define BLOCK_WOOD	5
+#define BLOCK_BRICK	6
+#define BLOCK_STONE_BRICK	7
+#define BLOCK_LEAF
+#define BLOCK_IRON	
+#define BLOCK_COPPER
+
+// ores
+#define BLOCK_COAL_ORE		9
+#define BLOCK_IRON_ORE		10
+#define BLOCK_COPPER_ORE	11
+#define BLOCK_DIAMOND_ORE	12
+#define BLOCK_EMERALD_ORE	13
+#define BLOCK_GOLD_ORE		14
+#define BLOCK_RUBY_ORE		15
+
+// multi-face blocks
+#define BLOCK_GRASS	3
+#define BLOCK_BARK	8
+
+// mechanical / non-electric
+#define BLOCK_CRAFTING	20
+#define BLOCK_FURNACE	21
+
+// electric
+#define BLOCK_QUARRY		22
+#define BLOCK_RECYCLER	23
+#define BLOCK_CRUSHER	24
+#define BLOCK_WASHER		25
+#define BLOCK_SMELTER	26
+#define BLOCK_GENERATOR	27
+#define BLOCK_PUMP			28
+#define BLOCK_SOLAR_PANEL	29
+#define BLOCK_ASSEMBLER		30
+#define BLOCK_OIL_REFINERY	31
+
+// storage
+#define BLOCK_CHEST	32
+#define BLOCK_TANK	33
+
+// transport
+#define BLOCK_PIPE 40
+#define BLOCK_BELT 41
+#define BLOCK_WIRE 42
+
+// fluids
+#define BLOCK_WATER	50
+#define BLOCK_WATER	51
+#define BLOCK_WATER	52
+#define BLOCK_WATER_FLOW	53
+#define BLOCK_WATER_FLOW	54
+#define BLOCK_WATER_FLOW	55
 
 struct Chunk
 {
 	union { struct { uint32 x, z; }; uint64 id; uvec2 coords; };
-	BlockID blocks[NUM_CHUNK_BLOCKS];
+	u16 blocks_index;
 };
 
-void generate_chunk_terrain(Chunk* chunk, uint offset = 256, float flatness = 32)
+struct Chunk_Loader
 {
-	uint x_pos = chunk->x & 0xFFF0;
-	uint z_pos = chunk->z & 0xFFF0;
+	union
+	{
+		Chunk loaded_chunks[NUM_CHUNKS];
 
-	BlockID* blocks = chunk->blocks;
+		struct
+		{
+			Chunk active[NUM_ACTIVE_CHUNKS];
+			Chunk border[NUM_BORDER_CHUNKS];
+			Chunk primed[NUM_PRIMED_CHUNKS];
+		};
+	};
 
-	for (uint i = 0; i < NUM_CHUNK_BLOCKS; ++i) blocks[i] = BLOCK_AIR;
+	u16 blocks[NUM_CHUNKS * NUM_CHUNK_BLOCKS];
+};
 
-	uint8 water_level = 14;
+float terrain_noise(float x, float y, float scale)
+{
+	uint octaves = 4;
+	float lacunarity = 2; // increase in frequency of octaves
+	float persistance = .5; // decrease in amplitude of octaves
 
-	float n = 1.f / flatness;
+	float frequency = 1;
+	float amplitude = .5; // don't want result to be > 1
+
+	float n = 0;
+
+	for (uint i = 0; i < octaves; i++)
+	{
+		n += amplitude * perlin(x / scale * frequency, y / scale * frequency);
+
+		amplitude *= persistance;
+		frequency *= lacunarity;
+	}
+
+	return n;
+}
+void generate(Chunk chunk, u16* blocks, float scale = 45)
+{
+	uint x_pos = chunk.x & 0xFFF0;
+	uint z_pos = chunk.z & 0xFFF0;
+
+	uint water_level = 24;
 
 	for (uint x = 0; x < CHUNK_X; ++x) {
-	for (uint z = 0; z < CHUNK_Z; ++z) {
+	for (uint z = 0; z < CHUNK_Z; ++z)
+	{
+		vec2 point = vec2{ x + x_pos, z + z_pos } / scale;
 
-		float noise_value = perlin(n * (x + x_pos + offset), n * (z + z_pos + offset));
-		uint height = 4 + (noise_value * 32);
-		
+		// heightfield noise
+		uint height = 64 * terrain_noise(point.x, point.y, 1);
+
+		//// tree noise
+		//float n1 = perlin(point.x, point.y);
+		//float n2 = perlin(point.x + EPSILON, point.y + EPSILON);
+		//float n3 = perlin(point.x + EPSILON2, point.y + EPSILON2);
+		//
+		//float d1 = (n2 - n1) / EPSILON; // first derivative
+		//float d2 = (n2 - (2.f * n1) + n3) / EPSILON2; // second derivative
+
 		for (uint y = 0; y < CHUNK_Y; ++y)
 		{
-			uint index = CHUNK_BLOCK_INDEX(x, y, z);
-			blocks[index] = BLOCK_AIR;
-		
-			if (height <= water_level)
+			uint index = BLOCK_INDEX(x, y, z, chunk.blocks_index);
+
+			if (y == water_level && height <= water_level)
 			{
-				if (y > water_level)
-					break;
-				else if (y == water_level)
-					blocks[index] = BLOCK_WATER;
-				else if (y < 16)
-				{
-					if (__rdtsc() % 256 == 0)
-						blocks[index] = BLOCK_ORES;
-					else
-						blocks[index] = BLOCK_STONE;
-				}
-				else if (y <= height)
-					blocks[index] = BLOCK_SAND;
-				else
-					blocks[index] = BLOCK_AIR;
+				blocks[index] = BLOCK_WATER;
+				continue;
 			}
-			else // land
+
+			if (y > height)
 			{
-				if (y > height)
-					break;
-				else if (height == water_level + 1 && y > 15)
+				blocks[index] = BLOCK_AIR;
+				continue;
+			}
+
+			if (height > water_level) // land
+			{
+				if (y == water_level + 1)
 					blocks[index] = BLOCK_SAND;
 				else if (y == height)
-				{
 					blocks[index] = BLOCK_GRASS;
-					if (__rdtsc() % 1250 == 0)
-						int a = 0;
-					//chunk_place_tree(chunk.blocks, x, y, z);
-				}
-				else if (y == height - 1 || y == height - 2 || y == height - 3)
+				else if (y == height - 1)
 					blocks[index] = BLOCK_DIRT;
-				else
-				{
-					if (__rdtsc() % 256 == 0)
-						blocks[index] = BLOCK_ORES;
-					else
-						blocks[index] = BLOCK_STONE;
-				}
 			}
-		
-			if (height == water_level + 1) blocks[index] = BLOCK_SAND;
-		
+			else if (y < water_level)// ocean
+			{
+				if (y == height)
+					blocks[index] = BLOCK_WATER;
+				else if (y == height - 1)
+					blocks[index] = BLOCK_SAND;
+			}
+
+			if (y < height - 1) // underground
+			{
+				blocks[index] = BLOCK_STONE;
+			}
+
+			//// trees
+			//if (d2 == 0.f && d1 == 0 && height == y)
+			//{
+			//	blocks[index] = BLOCK_WOOD;
+			//	continue;
+			//}
 		}
-	} } //blocks[BLOCK_INDEX(8, 64, 8)] = CLAY_BRICK_ID;
+	} }
 }
 
-// terrain manipulation
-void set_block(Chunk* chunks, vec3 pos, BlockID new_block)
+uint max(uint a, uint b) { return (a > b) ? a : b; }
+uint absi(int a) { return a >= 0 ? a : a * -1; }
+
+void unload_blocks(u16* blocks, uint index)
+{
+	memset(&blocks[index * NUM_CHUNK_BLOCKS], 0, sizeof(u16) * NUM_CHUNK_BLOCKS);
+}
+void update_chunks(Chunk_Loader* world, vec3 position)
+{
+	Chunk* old_chunks = world->loaded_chunks;
+
+	union {
+		Chunk loaded[NUM_CHUNKS];
+
+		struct {
+			Chunk active[NUM_ACTIVE_CHUNKS];
+			Chunk border[NUM_BORDER_CHUNKS];
+			Chunk primed[NUM_PRIMED_CHUNKS];
+		};
+	} new_chunks = {};
+
+	// coords of the chunk containing 'position' divided by chunk dimensions
+	int px = ( ((uint)position.x) & 0xFFF0 ) / CHUNK_X;
+	int pz = ( ((uint)position.z) & 0xFFF0 ) / CHUNK_Z;
+
+	// build array of new chunks
+	uint num_active = 0, num_border = 0, num_primed = 0;
+	for (int x = px - 3; x <= px + 3; x++) {
+	for (int z = pz - 3; z <= pz + 3; z++)
+	{
+		uint layer = max(absi(x - px), absi(z - pz));
+
+		if (layer < 2)
+			new_chunks.active[num_active++].coords = { x * CHUNK_X, z * CHUNK_Z };
+		else if (layer == 2)
+			new_chunks.border[num_border++].coords = { x * CHUNK_X, z * CHUNK_Z };
+		else
+			new_chunks.primed[num_primed++].coords = { x * CHUNK_X, z * CHUNK_Z };
+
+		// move player chunk to position 0 in new_chunks array
+		Chunk temp = new_chunks.active[4];
+		new_chunks.active[4] = new_chunks.active[0];
+		new_chunks.active[0] = temp;
+	} }
+
+	assert(num_active == NUM_ACTIVE_CHUNKS);
+	assert(num_border == NUM_BORDER_CHUNKS);
+	assert(num_primed == NUM_PRIMED_CHUNKS);
+
+	// keep track of block data that has been unloaded
+	uint num_free = 0;
+	u16 free_blocks[NUM_CHUNKS] = {};
+
+	// check for chunks that need to be unloaded
+	for (uint i = 0; i < NUM_CHUNKS; i++) // for each old chunk
+	{
+		bool keep = false;
+
+		// check if the chunk should stay loaded
+		for (uint j = 0; j < NUM_CHUNKS; j++)
+		{
+			if (old_chunks[i].id == new_chunks.loaded[j].id) // keep this chunk
+			{
+				keep = true;
+				new_chunks.loaded[j] = old_chunks[i];
+				break;
+			}
+		}
+
+		if (keep == false) // chunk should be unloaded
+		{
+			// mark it as free
+			free_blocks[num_free++] = old_chunks[i].blocks_index;
+
+			// unload the chunk data
+			unload_blocks(world->blocks, old_chunks[i].blocks_index);
+		}
+	}
+
+	// check for chunks that need to be generated / loaded from disk
+	for (uint i = 0; i < NUM_CHUNKS; i++) // for each new chunk
+	{
+		bool load = true;
+
+		// check if the chunk is already loaded
+		for (uint j = 0; j < NUM_CHUNKS; j++)
+		{
+			if (new_chunks.loaded[i].id == old_chunks[j].id)
+			{
+				load = false; // chunk is already loaded
+				new_chunks.loaded[i] = old_chunks[j];
+				break;
+			}
+		}
+
+		if (load)
+		{
+			new_chunks.loaded[i].blocks_index = free_blocks[--num_free];
+			generate(new_chunks.loaded[i], world->blocks);
+			// TODO : check if it is on disk & load the changes if it is
+		}
+	}
+
+	// finalizing
+	for (uint i = 0; i < NUM_CHUNKS; i++)
+		old_chunks[i] = new_chunks.loaded[i];
+
+	assert(num_free == 0);
+}
+
+// utilities
+
+void set_block(Chunk_Loader* chunks, vec3 pos, u16 new_block)
 {
 	uint chunk_x = ((uint)pos.x) & 0xFFF0;
 	uint chunk_z = ((uint)pos.z) & 0xFFF0;
@@ -100,14 +310,14 @@ void set_block(Chunk* chunks, vec3 pos, BlockID new_block)
 
 	for (uint i = 0; i < NUM_ACTIVE_CHUNKS; i++)
 	{
-		if (chunks[i].coords == uvec2(chunk_x, chunk_z))
+		if (chunks->active[i].coords == uvec2(chunk_x, chunk_z))
 		{
-			chunks[i].blocks[CHUNK_BLOCK_INDEX(local_x, local_y, local_z)] = new_block;
+			chunks->blocks[BLOCK_INDEX(local_x, local_y, local_z, chunks->active[i].blocks_index)] = new_block;
 			return;
 		}
 	}
 }
-void set_block(Chunk* chunks, uvec3 coords, BlockID new_block)
+void set_block(Chunk_Loader* chunks, uvec3 coords, u16 new_block)
 {
 	uint chunk_x = coords.x & 0xFFF0;
 	uint chunk_z = coords.z & 0xFFF0;
@@ -118,14 +328,14 @@ void set_block(Chunk* chunks, uvec3 coords, BlockID new_block)
 
 	for (uint i = 0; i < NUM_ACTIVE_CHUNKS; i++)
 	{
-		if (chunks[i].coords == uvec2(chunk_x, chunk_z))
+		if (chunks->active[i].coords == uvec2(chunk_x, chunk_z))
 		{
-			chunks[i].blocks[CHUNK_BLOCK_INDEX(local_x, local_y, local_z)] = new_block;
+			chunks->blocks[BLOCK_INDEX(local_x, local_y, local_z, chunks->active[i].blocks_index)] = new_block;
 			return;
 		}
 	}
 }
-BlockID get_block(Chunk* chunks, vec3 pos)
+u16 get_block(Chunk_Loader* chunks, vec3 pos)
 {
 	uint chunk_x = ((uint)pos.x) & 0xFFF0;
 	uint chunk_z = ((uint)pos.z) & 0xFFF0;
@@ -135,26 +345,22 @@ BlockID get_block(Chunk* chunks, vec3 pos)
 	uint local_y = (uint)pos.y;
 
 	for (uint i = 0; i < NUM_ACTIVE_CHUNKS; i++)
-	{
-		if (chunks[i].coords == uvec2(chunk_x, chunk_z))
-		{
-			return chunks[i].blocks[CHUNK_BLOCK_INDEX(local_x, local_y, local_z)];
-		}
-	}
+		if (chunks->active[i].coords == uvec2(chunk_x, chunk_z))
+			return chunks->blocks[BLOCK_INDEX(local_x, local_y, local_z, chunks->active[i].blocks_index)];
 
 	return INVALID;
 }
-BlockID get_block_raycast(Chunk* chunks, vec3 pos, vec3 dir)
+u16 get_block_raycast(Chunk_Loader* chunks, vec3 pos, vec3 dir)
 {
-	vec3 increment = vec3(0.2) * normalize(dir);
+	vec3 increment = vec3(.2, .2, .2) * normalize(dir);
 	vec3 test_point = pos + increment;
 
-	float increment_length = glm::length(increment);
+	float increment_length = length(increment);
 	float total_distance = increment_length;
 
 	while (total_distance < 3.6f)
 	{
-		BlockID block = get_block(chunks, test_point);
+		u16 block = get_block(chunks, test_point);
 		if (block) return block;
 
 		total_distance += increment_length;
@@ -163,17 +369,17 @@ BlockID get_block_raycast(Chunk* chunks, vec3 pos, vec3 dir)
 
 	return INVALID;
 }
-BlockID break_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, vec3* breakpos = NULL)
+u16 break_block_raycast(Chunk_Loader* chunks, vec3 pos, vec3 dir, vec3* breakpos = NULL)
 {
-	vec3 increment = vec3(0.2) * normalize(dir);
+	vec3 increment = vec3(.2) * normalize(dir);
 	vec3 test_point = pos + increment;
 
-	float increment_length = glm::length(increment);
+	float increment_length = length(increment);
 	float total_distance = increment_length;
 
 	while (total_distance < 3.6f)
 	{
-		BlockID test_block = get_block(chunks, test_point);
+		u16 test_block = get_block(chunks, test_point);
 
 		if (test_block)
 		{
@@ -194,17 +400,17 @@ BlockID break_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, vec3* breakpos = 
 
 	return BLOCK_AIR;
 }
-BlockID place_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, BlockID block, uvec3* place_pos = NULL)
+u16 place_block_raycast(Chunk_Loader* chunks, vec3 pos, vec3 dir, u16 block, uvec3* place_pos = NULL)
 {
-	vec3 increment = vec3(0.2) * normalize(dir);
+	vec3 increment = vec3(.2) * normalize(dir);
 	vec3 test_point = pos + increment;
 
-	float increment_length = glm::length(increment);
+	float increment_length = length(increment);
 	float total_distance = increment_length;
 
 	while (total_distance < 4)
 	{
-		BlockID test_block = get_block(chunks, test_point);
+		u16 test_block = get_block(chunks, test_point);
 
 		if (test_block && test_block != INVALID)
 		{
@@ -219,9 +425,9 @@ BlockID place_block_raycast(Chunk* chunks, vec3 pos, vec3 dir, BlockID block, uv
 
 	return BLOCK_AIR;
 }
-void get_place_pos_raycast(Chunk* chunks, vec3 pos, vec3 dir, uvec3* place_pos)
+uvec3 get_place_pos_raycast(Chunk_Loader* chunks, vec3 pos, vec3 dir)
 {
-	vec3 increment = vec3(0.2) * normalize(dir);
+	vec3 increment = vec3(.2) * normalize(dir);
 	vec3 test_point = pos + increment;
 
 	float increment_length = length(increment);
@@ -231,40 +437,45 @@ void get_place_pos_raycast(Chunk* chunks, vec3 pos, vec3 dir, uvec3* place_pos)
 	{
 		if (get_block(chunks, test_point) && get_block(chunks, test_point) != INVALID)
 		{
-			*place_pos = uvec3(test_point - increment); // position of where a block *would* be placed
-			return;
+			return uvec3(test_point - increment); // position of where a block *would* be placed
 		}
 
 		total_distance += increment_length;
 		test_point += increment;
 	}
 
-	place_pos->x = INVALID;
+	return uvec3(INVALID);
 }
-bool collide(Chunk* chunks, Cube_Collider_AA* object)
+
+void fill_sphere(Chunk_Loader* chunks, vec3 sphere_pos, float radius = 2, u16 block = BLOCK_AIR)
 {
-	vec3 position = object->position;
-	vec3 block_pos = vec3(floor(position.x), floor(position.y), floor(position.z));
+	uint chunk_x = (uint)sphere_pos.x & 0xFFF0;
+	uint chunk_z = (uint)sphere_pos.z & 0xFFF0;
 
-	Cube_Collider_AA collider = {};
-	collider.position = block_pos;
-	collider.scale = vec3(1);
+	vec3 local_sphere_pos = sphere_pos - vec3(chunk_x, 0, chunk_z) - vec3(.5);
 
-	// object must be smaller than 1x1x1 for this to work
-	if (cube_aa_cube_aa_intersect(*object, collider))
+	for (uint x = 0; x < CHUNK_X; ++x) {
+	for (uint z = 0; z < CHUNK_Z; ++z) {
+	for (uint y = 0; y < CHUNK_Y; ++y)
 	{
-		object->force.y = position.y - block_pos.y;
+		if (length(vec3(x, y, z) - local_sphere_pos) < radius)
+			set_block(chunks, vec3(x, y, z) + vec3(chunk_x, 0, chunk_z), block);
+	} } }
+}
+void spawn_tree(Chunk_Loader* chunks, vec3 pos)
+{
+	// trunk
+	for (uint i = 0; i < 7; i++)
+		set_block(chunks, pos + vec3(0, i, 0), BLOCK_WOOD);
 
-		//float y_force = position.x
-
-		//object->force = position - (block_pos + vec3(.5, 0, .5));
-		//printvec(object->force);
-		return true;
-	}
-	return false;
+	// leaves
+	fill_sphere(chunks, pos + vec3(0, 6, 0), 3, BLOCK_GRASS);
 }
 
 // rendering
+
+struct Solid_Drawable { vec3 position; float tex_offset; };
+struct Fluid_Drawable { vec3 position; };
 
 struct Chunk_Renderer
 {
@@ -275,7 +486,6 @@ struct Chunk_Renderer
 
 	Drawable_Mesh_UV solid_mesh;
 	Drawable_Mesh fluid_mesh;
-	Shader solid_shader, fluid_shader;
 };
 
 void init(Chunk_Renderer* renderer)
@@ -284,37 +494,21 @@ void init(Chunk_Renderer* renderer)
 	mesh_add_attrib_vec3 (3, sizeof(Solid_Drawable), 0); // world pos
 	mesh_add_attrib_float(4, sizeof(Solid_Drawable), sizeof(vec3)); // tex coord
 
-	GLuint texture_id  = load_texture("assets/textures/block_atlas.bmp");
-	GLuint material_id = load_texture("assets/textures/atlas_mat.bmp");
-
-	renderer->solid_mesh.texture_id  = texture_id;
-	renderer->solid_mesh.material_id = material_id;
-	load(&(renderer->solid_shader), "assets/shaders/solid.vert", "assets/shaders/mesh_uv.frag");
-
 	load(&renderer->fluid_mesh, "assets/meshes/fluid.mesh", sizeof(renderer->fluids));
 	mesh_add_attrib_vec3(2, sizeof(Fluid_Drawable), 0); // world pos
-
-	load(&(renderer->fluid_shader), "assets/shaders/fluid.vert", "assets/shaders/mesh.frag");
-	bind(renderer->fluid_shader);
-	set_float(renderer->fluid_shader, "timer" , 1.f);
 }
-void update_renderer(Chunk_Renderer* renderer, Chunk* chunk)
+void update(Chunk_Renderer* renderer, Chunk chunk, u16* blocks)
 {
-	uint num_solids = 0;
-	uint num_fluids = 0;
-
 	Solid_Drawable* solid_mem = renderer->solids;
 	Fluid_Drawable* fluid_mem = renderer->fluids;
 
-	const BlockID* blocks = chunk->blocks;
-	uint chunk_x = chunk->x;
-	uint chunk_z = chunk->z;
+	uint num_solids = 0, num_fluids = 0;
 
 	for (uint x = 0; x < CHUNK_X; ++x) {
 	for (uint z = 0; z < CHUNK_Z; ++z) {
 	for (uint y = 0; y < CHUNK_Y; ++y)
 	{
-		uint index = CHUNK_BLOCK_INDEX(x, y, z);
+		uint index = BLOCK_INDEX(x, y, z, chunk.blocks_index);
 
 		// if block is surrounded, don't draw it
 		if (y > 0 && x > 0 && z > 0 && y < 255 && x < 15 && z < 15)
@@ -325,7 +519,7 @@ void update_renderer(Chunk_Renderer* renderer, Chunk* chunk)
 			{
 				goto draw_block;
 			}
-
+		
 			if (blocks[index + 1] && blocks[index - 1]
 				&& blocks[index + 16] && blocks[index - 16]
 				&& blocks[index + 256] && blocks[index - 256])
@@ -333,18 +527,18 @@ void update_renderer(Chunk_Renderer* renderer, Chunk* chunk)
 				continue;
 			}
 		}
-
+		
 		draw_block:
 
-		BlockID block = blocks[index];
+		u16 block = blocks[index];
 		if (block == BLOCK_AIR) continue; // only store block data for non-air
-
+		
 		uint block_type = 1;
-		if (block < BLOCK_WATER) block_type = 1; // solid
-		else if (block < BLOCK_CROP) block_type = 2; // fluid
+		if      (block <  BLOCK_WATER) block_type = 1; // solid
+		else if (block == BLOCK_WATER) block_type = 2; // fluid
 		else continue;
-
-		vec3 position = vec3(chunk_x + x, y, chunk_z + z);
+		
+		vec3 position = vec3(x, y, z) + vec3(chunk.x, 0, chunk.z);
 
 		switch (block_type)
 		{
@@ -367,18 +561,4 @@ void update_renderer(Chunk_Renderer* renderer, Chunk* chunk)
 	renderer->num_fluids = num_fluids;
 	update(renderer->solid_mesh, num_solids * sizeof(Solid_Drawable), (byte*)renderer->solids);
 	update(renderer->fluid_mesh, num_fluids * sizeof(Fluid_Drawable), (byte*)renderer->fluids);
-}
-void draw(Chunk_Renderer* renderer, mat4 proj_view, float timer)
-{
-	bind(renderer->solid_shader);
-	set_mat4(renderer->solid_shader, "proj_view", proj_view);
-	bind_texture(renderer->solid_mesh);
-	
-	draw(renderer->solid_mesh, renderer->num_solids);
-	
-	bind(renderer->fluid_shader);
-	set_mat4(renderer->fluid_shader, "proj_view", proj_view);
-	set_float(renderer->fluid_shader, "timer", timer);
-	
-	draw(renderer->fluid_mesh, renderer->num_fluids);
 }

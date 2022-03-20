@@ -1,162 +1,188 @@
-#include "tools.h"
+#include "items.h"
+
+#define MAX_WORLD_ITEMS 64 // items that can be dropped in the world
+
+extern uint give_player_item(Item* player_items, Item item); // is this bad?
+
+struct World_Item // an item that has been dropped in the world
+{
+	Item item;
+	vec3 position;
+	vec3 velocity;
+};
+
+void spawn(World_Item* items, Item item, vec3 position)
+{
+	for (uint i = 0; i < MAX_WORLD_ITEMS; i++)
+	{
+		if (items[i].item.type == NULL)
+		{
+			items[i].item = item;
+			items[i].position = position;
+			items[i].velocity = {0, 1, 0};
+			return;
+		}
+	}
+}
 
 struct World
 {
-	union
-	{
-		Chunk chunks[9 + 9];
-	
-		struct
-		{
-			Chunk active_chunks[9];
-			Chunk border_chunks[9];
-		};
-	};
-
-	Audio block_break;
+	Chunk_Loader chunks;
+	World_Item items[MAX_WORLD_ITEMS];
 };
 
 void init(World* world, vec3 position)
 {
-	uint offset_x = ( ((uint)position.x) & 0xFFF0 ) - 16;
-	uint offset_z = ( ((uint)position.z) & 0xFFF0 ) - 16;
-
-	uint i = 0;
-	for (uint x = 0; x < 3; ++x) {
-	for (uint z = 0; z < 3; ++z)
-	{
-		uvec2 coords = uvec2((x * CHUNK_X) + offset_x, (z * CHUNK_Z) + offset_z);
-		world->chunks[i].coords = coords;
-		generate_chunk_terrain(&world->chunks[i]);
-		i++;
-	} }
-
-	//audio
-	world->block_break = load_audio("assets/audio/block.audio");
+	// without this, all chunks will have blocks_index = 0
+	for (uint i = 0; i < NUM_CHUNKS; i++)
+		world->chunks.loaded_chunks[i].blocks_index = i;
 }
-void update(World* world, Keyboard keys, Mouse mouse, Camera camera, Particle_Emitter* emitter, Item* items)
+void update(World* world, Camera camera, Mouse mouse, float dtime, Item* player_items, Audio* pops)
 {
-	vec3 position = camera.position;
-	vec3 front    = camera.front;
+	update_chunks(&world->chunks, camera.position);
 
-	//  --- chunk updates --- //
-	uint chunk_x =  (((uint)position.x) & 0xFFF0 ) - 16;
-	uint chunk_z =  (((uint)position.z) & 0xFFF0 ) - 16;
-	
-	// rn i reload everything if we move to a new chunk
-	// later i'll move unloaded chunks to border chunks & only generate what we need
-
-	//uvec2 loaded_chunks[9] = {}; // chunks that are currently loaded
-	//for (uint i = 0; i < 9; i++)
-	//{
-	//	loaded_chunks[i] = world->active_chunks[i].coords;
-	//}
-
-	static uvec2 last_coords = {}; // last frame's player chunk
-	if (last_coords != uvec2(chunk_x, chunk_z)) // player is in a new chunk
+	// world item physics
+	World_Item* items = world->items;
+	for (uint i = 0; i < MAX_WORLD_ITEMS; i++)
 	{
-		uint offset_x = ( ((uint)position.x) & 0xFFF0 ) - 16;
-		uint offset_z = ( ((uint)position.z) & 0xFFF0 ) - 16;
-
-		uint i = 0;
-		for (uint x = 0; x < 3; ++x) {
-		for (uint z = 0; z < 3; ++z)
+		if (items[i].item.type > 0)
 		{
-			uvec2 coords = uvec2((x * CHUNK_X) + offset_x, (z * CHUNK_Z) + offset_z);
-			world->active_chunks[i].coords = coords;
-			generate_chunk_terrain(&world->active_chunks[i]);
-			i++;
-		} }
-	} last_coords = uvec2(chunk_x, chunk_z);
+			vec3 dir = camera.position - items[i].position;
+			float distance_to_player = length(dir);
 
-	// block break/place
-	if (mouse.left_button.is_pressed && !mouse.left_button.was_pressed)
-	{
-		vec3 break_pos = {};
-		BlockID block = break_block_raycast(world->chunks, position, front, &break_pos);
-		if (block)
-		{
-			spawn_blockbreak(emitter, break_pos);
-			spawn(items, ITEM_BLOCK, block, vec3(break_pos.x, break_pos.y, break_pos.z));
-			play_audio(world->block_break);
+			if (distance_to_player < 2)
+			{
+				play_audio(pops[random_uint() % 3]);
+				if(give_player_item(player_items, items[i].item))
+					items[i] = {};
+			}
+			else
+			{
+				if (distance_to_player < 4) // this should be else if
+					items[i].velocity += normalize(dir) * dtime * 2.f;
+				else
+					items[i].velocity *= vec3(0, 1, 0);
+
+				vec3 pos = items[i].position;
+				vec3 vel = items[i].velocity;
+
+				pos += vel * dtime;
+
+				if (get_block(&world->chunks, pos))
+				{
+					//if(ceil(pos.x) - pos.x > floor(pos.x) - pos.x)
+
+					//vel.x = (ceil(pos.x) - pos.x) * 30; // bounce force
+					vel.y = (ceil(pos.y) - pos.y) * 30; // bounce force
+					//vel.z = (ceil(pos.z) - pos.z) * 30; // bounce force
+				}
+				else
+					vel.y += GRAVITY * dtime;
+
+				items[i].position = pos;
+				items[i].velocity = vel;
+			}
 		}
-	}
-	if (mouse.right_button.is_pressed && !mouse.right_button.was_pressed)
-	{
-		uvec3 place_pos = {};
-		BlockID block = place_block_raycast(world->chunks, position, front, BLOCK_DIRT, &place_pos);
-		if (block) { }
 	}
 }
 
 // rendering
 
+struct Item_Drawable
+{
+	vec3 position;
+	vec2 tex_offset;
+};
+
 struct World_Renderer
 {
-	Chunk_Renderer chunks[9];
+	GLuint texture, material;
+
+	// terrain
+	Shader solid_shader, fluid_shader;
+	Chunk_Renderer chunks[NUM_ACTIVE_CHUNKS];
+
+	// world items
+	uint num_blocks;
+	Item_Drawable blocks[MAX_WORLD_ITEMS]; // just for blocks
+	Item_Drawable items [MAX_WORLD_ITEMS]; // general purpose
+	Drawable_Mesh_UV block_mesh, item_mesh;
+	Shader block_shader;
+	mat3 transform;
 };
 
 void init(World_Renderer* renderer)
 {
-	for (uint i = 0; i < NUM_ACTIVE_CHUNKS; i++) { init(renderer->chunks + i); }
-}
-void update_renderer(World_Renderer* renderer, World* world, float dtime)
-{
+	renderer->texture  = load_texture("assets/textures/block_atlas.bmp");
+	renderer->material = load_texture("assets/textures/materials.bmp"  );
+
+	// terrain
 	for (uint i = 0; i < 9; i++)
-	{
-		update_renderer(renderer->chunks + i, world->active_chunks + i);
-	}
+		init(renderer->chunks + i);
+
+	load(&renderer->solid_shader, "assets/shaders/chunk/solid.vert", "assets/shaders/mesh_uv.frag");
+	load(&renderer->fluid_shader, "assets/shaders/chunk/fluid.vert", "assets/shaders/mesh.frag");
+
+	// world items
+	load(&renderer->block_mesh, "assets/meshes/block.mesh_uv", sizeof(renderer->blocks));
+	mesh_add_attrib_vec3 (3, sizeof(Item_Drawable), 0); // world position
+	mesh_add_attrib_float(4, sizeof(Item_Drawable), sizeof(vec3)); // texture offset
+
+	load(&renderer->block_shader, "assets/shaders/chunk/item.vert", "assets/shaders/mesh_uv.frag");
 }
-void draw(World_Renderer* renderer, float dtime, mat4 proj_view)
+void update(World_Renderer* renderer, World* world, float dtime)
 {
+	// terrain
+	for (uint i = 0; i < NUM_ACTIVE_CHUNKS; i++) // TODO : we don't need to render chunks the player can't see
+		update(renderer->chunks + i, world->chunks.active[i], world->chunks.blocks);
+
+	// world items
+	static float timer = 0; timer = (timer > TWOPI) ? 0 : timer + (TWOPI * dtime) / 5;
+	float offset = .05f + (sinf(timer * 2.f) * .05f);
+
+	renderer->transform = mat3(.25) * mat3(rotate(timer, vec3(0, 1, 0)));
+
+	World_Item* items = world->items;
+
+	uint num_blocks = 0;
+	for (uint i = 0; i < MAX_WORLD_ITEMS; i++)
+	{
+		switch (items[i].item.type)
+		{
+		case ITEM_BLOCK : {
+			renderer->blocks[num_blocks].position = items[i].position + vec3(0, offset, 0);
+			renderer->blocks[num_blocks++].tex_offset = vec2(items[i].item.id - 1.f, 0) / vec2(16);
+		} break;
+		}
+	}
+
+	renderer->num_blocks = num_blocks;
+	update(renderer->block_mesh, num_blocks * sizeof(Item_Drawable), (byte*)renderer->blocks);
+}
+void draw(World_Renderer* renderer, mat4 proj_view, float dtime)
+{
+	// terrain
+	bind(renderer->solid_shader);
+	set_mat4(renderer->solid_shader, "proj_view", proj_view);
+	bind_texture(renderer->texture, 0);
+	bind_texture(renderer->material, 1);
+
+	for (uint i = 0; i < 9; i++) // draw solids
+		draw(renderer->chunks[i].solid_mesh, renderer->chunks[i].num_solids);
+
 	static float timer = 0; timer += .25f * dtime;
+	bind(renderer->fluid_shader);
+	set_mat4(renderer->fluid_shader, "proj_view", proj_view);
+	set_float(renderer->fluid_shader, "timer", timer);
 
-	for (uint i = 0; i < 9; i++)
-	{
-		draw(renderer->chunks + i, proj_view, timer);
-	}
-}
+	for (uint i = 0; i < 9; i++) // draw fluids
+		draw(renderer->chunks[i].fluid_mesh, renderer->chunks[i].num_fluids);
 
-// sky rendering
-
-struct Sky_Drawable
-{
-	vec3 position;
-	mat3 rotation;
-};
-
-struct Sky_Renderer
-{
-	Drawable_Mesh_UV mesh;
-	Shader shader;
-};
-
-void init(Sky_Renderer* renderer)
-{
-	load(&renderer->mesh, "assets/meshes/sky.mesh_uv", sizeof(Sky_Drawable));
-	mesh_add_attrib_vec3(3, sizeof(Sky_Drawable), 0); // world pos
-	mesh_add_attrib_mat3(4, sizeof(Sky_Drawable), sizeof(vec3)); // rotation
-
-	GLuint texture_id  = load_texture("assets/textures/palette.bmp");
-	GLuint material_id = load_texture("assets/textures/materials.bmp");
-
-	renderer->mesh.texture_id  = texture_id;
-	renderer->mesh.material_id = material_id;
-
-	load(&(renderer->shader), "assets/shaders/transform/mesh_uv.vert", "assets/shaders/mesh_uv.frag");
-}
-void update_renderer(Sky_Renderer* renderer, vec3 pos)
-{
-	Sky_Drawable sky = {};
-	sky.position = vec3(pos.x, -20, pos.z);
-	sky.rotation = mat3(1);
-
-	update(renderer->mesh, sizeof(Sky_Drawable), (byte*)&sky);
-}
-void draw(Sky_Renderer* renderer, mat4 proj_view)
-{
-	bind(renderer->shader);
-	set_mat4(renderer->shader, "proj_view", proj_view);
-	bind_texture(renderer->mesh);
-	draw(renderer->mesh);
+	// world items
+	bind(renderer->block_shader);
+	set_mat4(renderer->block_shader, "proj_view", proj_view);
+	set_mat3(renderer->block_shader, "transform", renderer->transform);
+	bind_texture(renderer->texture , 0);
+	bind_texture(renderer->material, 1);
+	draw(renderer->block_mesh, renderer->num_blocks);
 }

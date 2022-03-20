@@ -1,6 +1,15 @@
-#include "intermediary.h"
+#include "proprietary/boilerplate.h"
+
+float ilerp(float a, float b, float x)
+{
+	return (x - a) / (b - a); // inverse lerp
+}
+
+#define EPSILON (1.e-05f)
+#define EPSILON2 (EPSILON * EPSILON)
 
 #define WINDOW_ERROR(str) out("WINDOW ERROR: " << str)
+#define FirstPress(input) (input.is_pressed && !input.was_pressed)
 
 struct Window
 {
@@ -8,7 +17,7 @@ struct Window
 	uint screen_width, screen_height;
 };
 
-void init_window(Window* window, uint screen_width, uint screen_height, const char* window_name = "window")
+void init(Window* window, uint screen_width, uint screen_height, const char* window_name = "window")
 {
 	window->screen_width  = screen_width;
 	window->screen_height = screen_height;
@@ -26,10 +35,10 @@ void init_window(Window* window, uint screen_width, uint screen_height, const ch
 	glfwMakeContextCurrent(window->instance);
 	glfwSwapInterval(1); // disable v-sync
 
-	//Capture the cursor
+	// capture the cursor
 	glfwSetInputMode(window->instance, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-	//GLEW
+	// GLEW
 	glewExperimental = GL_TRUE;
 	glewInit();
 
@@ -39,7 +48,7 @@ void init_window(Window* window, uint screen_width, uint screen_height, const ch
 	//glEnable(GL_FRAMEBUFFER_SRGB); // gamma correction
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-	//audio
+	// audio
 	ALCdevice* audio_device= alcOpenDevice(NULL);
 	if (audio_device == NULL) { out("cannot open sound card"); }
 
@@ -47,7 +56,7 @@ void init_window(Window* window, uint screen_width, uint screen_height, const ch
 	if (audio_context == NULL) { out("cannot open context"); }
 	alcMakeContextCurrent(audio_context);
 }
-void update_window(Window window)
+void update(Window window)
 {
 	glfwPollEvents();
 	glfwSwapBuffers(window.instance);
@@ -56,6 +65,9 @@ void shutdown_window()
 {
 	glfwTerminate();
 }
+
+void enable_cursor(Window window) { glfwSetInputMode(window.instance, GLFW_CURSOR, GLFW_CURSOR_NORMAL); }
+void disable_cursor(Window window) { glfwSetInputMode(window.instance, GLFW_CURSOR, GLFW_CURSOR_DISABLED); }
 
 struct Button
 {
@@ -74,7 +86,7 @@ struct Mouse
 	Button right_button, left_button;
 };
 
-void update_mouse(Mouse* mouse, Window window)
+void update(Mouse* mouse, Window window)
 {
 	static Mouse prev_mouse = {};
 
@@ -159,7 +171,7 @@ struct Keyboard
 	};
 };
 
-void init_keyboard(Keyboard* keyboard)
+void init(Keyboard* keyboard)
 {
 	keyboard->A = { false, false, GLFW_KEY_A };
 	keyboard->B = { false, false, GLFW_KEY_B };
@@ -198,7 +210,7 @@ void init_keyboard(Keyboard* keyboard)
 	keyboard->LEFT  = { false, false, GLFW_KEY_LEFT  };
 	keyboard->RIGHT = { false, false, GLFW_KEY_RIGHT };
 }
-void update_keyboard(Keyboard* keyboard, Window window)
+void update(Keyboard* keyboard, Window window)
 {
 	for (uint i = 0; i < NUM_KEYBOARD_BUTTONS; ++i)
 	{

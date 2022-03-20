@@ -1,6 +1,4 @@
 # voxel-game
-This is a voxel game i made to practice game programming.
-
 ## Features
 
 ### procedural terrain generation
@@ -15,13 +13,10 @@ This is a voxel game i made to practice game programming.
 ### (WIP) multiplayer
 ![Error loading image!](assets/misc/multiplayer.gif)
 
-## Installation
-set additional include/lib paths to "dependencies/"
-
-## License
-[MIT](https://choosealicense.com/licenses/mit/)
-
 ## Reviews
 - "nice" - my mom
 - "no errors" - my compiler
 - "original" - notch
+
+## Credits
+- Block textures & icons are from the extremely talented [BDcraft](https://bdcraft.net/)

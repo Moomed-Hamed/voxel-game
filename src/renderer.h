@@ -1,16 +1,8 @@
 #include "window.h"
 
-/* -- how 2 draw a mesh --
+#define DRAW_DISTANCE 1024.0f
 
-	Drawable_Mesh mesh = {};
-	load(mesh, "object.mesh");
-	
-	Shader shader = {};
-	load(&shader, "vertex_shader.vert", "fragment_shader.frag");
-
-	bind(shader);
-	draw(mesh);
-*/
+// -------------------- Shaders -------------------- //
 
 struct Shader { GLuint id; };
 
@@ -37,7 +29,7 @@ void load(Shader* shader, const char* vert_path, const char* frag_path)
 		{
 			char* error_log = (char*)calloc(log_size, sizeof(char));
 			glGetShaderInfoLog(vert_shader, log_size, NULL, error_log);
-			out("VERTEX SHADER ERROR:\n" << error_log);
+			out("VERT SHADER ERROR:[" << vert_path << "]\n" << error_log);
 			free(error_log);
 		}
 
@@ -47,7 +39,7 @@ void load(Shader* shader, const char* vert_path, const char* frag_path)
 		{
 			char* error_log = (char*)calloc(log_size, sizeof(char));
 			glGetShaderInfoLog(frag_shader, log_size, NULL, error_log);
-			out("FRAGMENT SHADER ERROR:\n" << error_log);
+			out("FRAG SHADER ERROR:[" << frag_path << "]\n" << error_log);
 			free(error_log);
 		}
 	}
@@ -57,10 +49,12 @@ void load(Shader* shader, const char* vert_path, const char* frag_path)
 	glAttachShader(shader->id, frag_shader);
 	glLinkProgram (shader->id);
 
-	GLsizei length = 0;
-	char error[256] = {};
-	glGetProgramInfoLog(shader->id, 256, &length, error);
-	if(length > 0) out(error);
+	{
+		GLsizei length = 0;
+		char log[256] = {};
+		glGetProgramInfoLog(shader->id, 256, &length, log);
+		if (length) out("SHADER PROGRAM ERROR:[" << vert_path << ", " << frag_path << "]\n\n" << log);
+	}
 
 	glDeleteShader(vert_shader);
 	glDeleteShader(frag_shader);
@@ -87,26 +81,33 @@ void set_vec3 (Shader shader, const char* name, vec3 value )
 {
 	glUniform3f(glGetUniformLocation(shader.id, name), value.x, value.y, value.z);
 }
+void set_mat3 (Shader shader, const char* name, mat3 value)
+{
+	glUniformMatrix3fv(glGetUniformLocation(shader.id, name), 1, GL_FALSE, (float*)&value);
+}
 void set_mat4 (Shader shader, const char* name, mat4 value )
 {
 	glUniformMatrix4fv(glGetUniformLocation(shader.id, name), 1, GL_FALSE, (float*)&value);
 }
 
-GLuint load_texture(const char* path)
+// -------------------- Textures ------------------- //
+
+GLuint load_texture(const char* path, bool flip = true)
 {
 	GLuint id = {};
 	int width, height, num_channels;
 	byte* image;
 
-	stbi_set_flip_vertically_on_load(true);
+	stbi_set_flip_vertically_on_load(flip);
 
 	image = stbi_load(path, &width, &height, &num_channels, 0);
+	if (image == NULL) out("ERROR : '" << path << "' NOT FOUND!");
 
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glGenerateMipmap(GL_TEXTURE_2D);
@@ -115,6 +116,37 @@ GLuint load_texture(const char* path)
 
 	return id;
 }
+GLuint load_texture_png(const char* path)
+{
+	GLuint id = {};
+	int width, height, num_channels;
+	byte* image;
+
+	stbi_set_flip_vertically_on_load(false);
+
+	image = stbi_load(path, &width, &height, &num_channels, 0);
+	if (image == NULL) out("ERROR : '" << path << "' NOT FOUND!");
+
+	glGenTextures(1, &id);
+	glBindTexture(GL_TEXTURE_2D, id);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	stbi_image_free(image);
+
+	return id;
+}
+void bind_texture(GLuint texture, uint texture_unit = 0)
+{
+	glActiveTexture(GL_TEXTURE0 + texture_unit);
+	glBindTexture(GL_TEXTURE_2D, texture);
+}
+
+// ------------------ Mesh Loading ----------------- //
 
 struct Mesh_Data
 {
@@ -251,6 +283,8 @@ void load(Mesh_Data_Anim_UV* data, const char* path)
 	fclose(mesh_file);
 }
 
+// ----------------- Mesh Rendering ---------------- //
+
 struct Drawable_Mesh
 {
 	GLuint VAO, VBO, EBO;
@@ -260,7 +294,7 @@ struct Drawable_Mesh
 struct Drawable_Mesh_UV
 {
 	GLuint VAO, VBO, EBO;
-	uint num_indices, texture_id, material_id;
+	uint num_indices;
 };
 
 struct Drawable_Mesh_Anim
@@ -272,7 +306,7 @@ struct Drawable_Mesh_Anim
 struct Drawable_Mesh_Anim_UV
 {
 	GLuint VAO, VBO, EBO, UBO;
-	uint num_indices, texture_id, material_id;
+	uint num_indices;
 };
 
 void load(Drawable_Mesh* mesh, const char* path, uint reserved_mem_size = 0)
@@ -314,18 +348,7 @@ void load(Drawable_Mesh* mesh, const char* path, uint reserved_mem_size = 0)
 		glEnableVertexAttribArray(norm_attrib);
 	}
 }
-void update(Drawable_Mesh mesh, uint vb_size, byte* vb_data)
-{
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
-}
-void draw(Drawable_Mesh mesh, uint num_instances)
-{
-	glBindVertexArray(mesh.VAO);
-	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
-}
-
-void load(Drawable_Mesh_UV* mesh, const char* path, uint reserved_mem_size)
+void load(Drawable_Mesh_UV* mesh, const char* path, uint reserved_mem_size = 0)
 {
 	Mesh_Data_UV mesh_data = {};
 	load(&mesh_data, path);
@@ -371,25 +394,6 @@ void load(Drawable_Mesh_UV* mesh, const char* path, uint reserved_mem_size)
 		glEnableVertexAttribArray(tex_attrib);
 	}
 }
-void update(Drawable_Mesh_UV mesh, uint vb_size, byte* vb_data)
-{
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
-}
-void bind_texture(Drawable_Mesh_UV mesh, uint texture_unit = 0)
-{
-	glActiveTexture(GL_TEXTURE0 + texture_unit);
-	glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-
-	glActiveTexture(GL_TEXTURE1 + texture_unit);
-	glBindTexture(GL_TEXTURE_2D, mesh.material_id);
-}
-void draw(Drawable_Mesh_UV mesh, uint num_instances = 1)
-{
-	glBindVertexArray(mesh.VAO);
-	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
-}
-
 void load(Drawable_Mesh_Anim* mesh, const char* path, uint reserved_mem_size = 0)
 {
 	Mesh_Data_Anim mesh_data;
@@ -449,20 +453,6 @@ void load(Drawable_Mesh_Anim* mesh, const char* path, uint reserved_mem_size = 0
 	//glBindBufferRange(GL_UNIFORM_BUFFER, 0, renderdata->UBO, 0, model_data.num_joints * sizeof(glm::mat4));
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, mesh->UBO);
 }
-void update(Drawable_Mesh_Anim mesh, uint num_bones, mat4* pose, uint vb_size, byte* vb_data)
-{
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
-
-	glBindBuffer(GL_UNIFORM_BUFFER, mesh.UBO);
-	glBufferSubData(GL_UNIFORM_BUFFER, 0, num_bones * sizeof(mat4), pose);
-}
-void draw(Drawable_Mesh_Anim mesh, uint num_instances = 1)
-{
-	glBindVertexArray(mesh.VAO);
-	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
-}
-
 void load(Drawable_Mesh_Anim_UV* mesh, const char* path, uint reserved_mem_size = 0)
 {
 	Mesh_Data_Anim_UV mesh_data;
@@ -529,6 +519,25 @@ void load(Drawable_Mesh_Anim_UV* mesh, const char* path, uint reserved_mem_size 
 	//glBindBufferRange(GL_UNIFORM_BUFFER, 0, renderdata->UBO, 0, model_data.num_joints * sizeof(glm::mat4));
 	glBindBufferBase(GL_UNIFORM_BUFFER, 0, mesh->UBO);
 }
+
+void update(Drawable_Mesh mesh, uint vb_size, byte* vb_data)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+}
+void update(Drawable_Mesh_UV mesh, uint vb_size, byte* vb_data)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+}
+void update(Drawable_Mesh_Anim mesh, uint num_bones, mat4* pose, uint vb_size, byte* vb_data)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
+
+	glBindBuffer(GL_UNIFORM_BUFFER, mesh.UBO);
+	glBufferSubData(GL_UNIFORM_BUFFER, 0, num_bones * sizeof(mat4), pose);
+}
 void update(Drawable_Mesh_Anim_UV mesh, uint num_bones, mat4* pose, uint vb_size, byte* vb_data)
 {
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
@@ -537,14 +546,26 @@ void update(Drawable_Mesh_Anim_UV mesh, uint num_bones, mat4* pose, uint vb_size
 	glBindBuffer(GL_UNIFORM_BUFFER, mesh.UBO);
 	glBufferSubData(GL_UNIFORM_BUFFER, 0, num_bones * sizeof(mat4), pose);
 }
-void bind_texture(Drawable_Mesh_Anim_UV mesh, uint texture_unit = 0)
+
+void draw(Drawable_Mesh mesh, uint num_instances = 1)
 {
-	glActiveTexture(GL_TEXTURE0 + texture_unit);
-	glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
+}
+void draw(Drawable_Mesh_UV mesh, uint num_instances = 1)
+{
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
+}
+void draw(Drawable_Mesh_Anim mesh, uint num_instances = 1)
+{
+	glBindVertexArray(mesh.VAO);
+	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
 }
 void draw(Drawable_Mesh_Anim_UV mesh, uint num_instances = 1)
 {
 	glBindVertexArray(mesh.VAO);
+	glBindBufferBase(GL_UNIFORM_BUFFER, 1, mesh.UBO); // animations use slot 1
 	glDrawElementsInstanced(GL_TRIANGLES, mesh.num_indices, GL_UNSIGNED_INT, 0, num_instances);
 }
 
@@ -585,6 +606,8 @@ void mesh_add_attrib_mat3 (GLuint attrib_id, uint stride, uint offset)
 	glEnableVertexAttribArray(attrib_id);
 }
 
+// ---------- Deferred Rendering Pipeline ---------- //
+
 /* -- deferred rendering theory --
 
 	glBindFramebuffer(GL_FRAMEBUFFER, g_buffer.FBO);
@@ -597,7 +620,7 @@ void mesh_add_attrib_mat3 (GLuint attrib_id, uint stride, uint offset)
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	bind(lighting_shader);
-	g_buffer_draw(g_buffer);
+	draw(g_buffer);
 */
 
 struct G_Buffer
@@ -607,10 +630,12 @@ struct G_Buffer
 	GLuint VAO, VBO, EBO; // for drawing the quad
 };
 
-void init_g_buffer(G_Buffer* buf, Window window)
+G_Buffer make_g_buffer(Window window)
 {
-	glGenFramebuffers(1, &buf->FBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, buf->FBO);
+	G_Buffer buf = {};
+
+	glGenFramebuffers(1, &buf.FBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, buf.FBO);
 
 	GLuint g_positions, g_normals, g_albedo;
 
@@ -624,14 +649,14 @@ void init_g_buffer(G_Buffer* buf, Window window)
 	// normal color buffer
 	glGenTextures(1, &g_normals);
 	glBindTexture(GL_TEXTURE_2D, g_normals);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window.screen_width, window.screen_height, 0, GL_RGBA, GL_FLOAT, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, window.screen_width, window.screen_height, 0, GL_RGBA, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	// albedo color buffer
 	glGenTextures(1, &g_albedo);
 	glBindTexture(GL_TEXTURE_2D, g_albedo);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, window.screen_width, window.screen_height, 0, GL_RGBA, GL_FLOAT, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, window.screen_width, window.screen_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -651,9 +676,9 @@ void init_g_buffer(G_Buffer* buf, Window window)
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) { out("FRAMEBUFFER ERROR : INCOMPLETE"); stop; }
 
-	buf->positions = g_positions;
-	buf->normals   = g_normals;
-	buf->albedo    = g_albedo;
+	buf.positions = g_positions;
+	buf.normals   = g_normals;
+	buf.albedo    = g_albedo;
 
 	// make a screen quad
 
@@ -678,17 +703,17 @@ void init_g_buffer(G_Buffer* buf, Window window)
 		3,1,0
 	};
 
-	glGenVertexArrays(1, &buf->VAO);
-	glBindVertexArray(buf->VAO);
+	glGenVertexArrays(1, &buf.VAO);
+	glBindVertexArray(buf.VAO);
 
-	glGenBuffers(1, &buf->VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, buf->VBO);
+	glGenBuffers(1, &buf.VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(verts) + sizeof(tex_coords), NULL, GL_STATIC_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
 	glBufferSubData(GL_ARRAY_BUFFER, sizeof(verts), sizeof(tex_coords), tex_coords);
 
-	glGenBuffers(1, &buf->EBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf->EBO);
+	glGenBuffers(1, &buf.EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf.EBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indicies), indicies, GL_STATIC_DRAW);
 
 	uint offset = 0;
@@ -700,8 +725,10 @@ void init_g_buffer(G_Buffer* buf, Window window)
 	GLint tex_attrib = 1; // texture coordinates
 	glVertexAttribPointer(tex_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)offset);
 	glEnableVertexAttribArray(tex_attrib);
+
+	return buf;
 }
-void draw_g_buffer(G_Buffer g_buffer)
+void draw(G_Buffer g_buffer)
 {
 	glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, g_buffer.positions);
 	glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, g_buffer.normals);
@@ -713,35 +740,14 @@ void draw_g_buffer(G_Buffer g_buffer)
 
 /* -- deferred rendering cheat sheet --
 
-	position texture = 0
-	normal   texture = 1
-	albedo   texture = 2
+	position = texture_unit 0
+	normal   = texture_unit 1
+	albedo   = texture_unit 2
 
 	GL_FRAMEBUFFER = 0 for default framebuffer
 */
 
-struct Point_Light
-{
-	vec3 position, color;
-	float intensity;
-};
-
-struct Spot_Light
-{
-	vec3 position, direction, color;
-	float inner_cuttof, outer_cuttof;
-};
-
-struct Light_Renderer
-{
-	Point_Light* point_lights;
-	Spot_Light*  spot_lights;
-};
-
-void init(Light_Renderer* renderer)
-{
-
-}
+// -------------------- Lighting ------------------- //
 
 Shader make_lighting_shader()
 {
@@ -749,12 +755,8 @@ Shader make_lighting_shader()
 	load(&lighting_shader, "assets/shaders/lighting.vert", "assets/shaders/lighting.frag");
 	bind(lighting_shader);
 
-	set_int(lighting_shader, "positions", 0);
-	set_int(lighting_shader, "normals"  , 1);
-	set_int(lighting_shader, "albedo"   , 2);
-
-	vec3 light_positions[4] = {vec3(5.00, .150, 0.00), vec3(-3, 1, 2), vec3(0, 4, 0), vec3(-1,.2,-1) };
-	vec3 light_colors[4]    = {vec3(.905, .568, .113), vec3(1 , 0, 1), vec3(1, 1, 1), vec3(0 , 0, 1) };
+	vec3 light_positions[4] = { vec3(3), vec3(1), vec3(4), vec3(5) };
+	vec3 light_colors   [4] = { vec3(1), vec3(1), vec3(1), vec3(1) };
 
 	set_vec3(lighting_shader, "light_positions[0]", light_positions[0]);
 	set_vec3(lighting_shader, "light_positions[1]", light_positions[1]);
@@ -769,7 +771,7 @@ Shader make_lighting_shader()
 	return lighting_shader;
 }
 
-// 2D rendering
+// ------------------ 2D Rendering ----------------- //
 
 struct Drawable_Mesh_2D
 {
@@ -779,7 +781,6 @@ struct Drawable_Mesh_2D
 struct Drawable_Mesh_2D_UV
 {
 	GLuint VAO, VBO, EBO;
-	GLuint texture_id;
 };
 
 void init(Drawable_Mesh_2D* mesh, uint reserved_mem_size = 0)
@@ -802,12 +803,10 @@ void init(Drawable_Mesh_2D* mesh, uint reserved_mem_size = 0)
 	glGenVertexArrays(1, &mesh->VAO);
 	glBindVertexArray(mesh->VAO);
 
-#define RENDER_MEM_SIZE (reserved_mem_size + sizeof(verts))
 	glGenBuffers(1, &mesh->VBO);
 	glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
-	glBufferData(GL_ARRAY_BUFFER, RENDER_MEM_SIZE, NULL, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, reserved_mem_size + sizeof(verts), NULL, GL_STATIC_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(verts), verts);
-#undef RENDER_MEM_SIZE
 
 	glGenBuffers(1, &mesh->EBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->EBO);
@@ -834,14 +833,20 @@ void draw(Drawable_Mesh_2D mesh, uint num_instances = 1)
 	glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, num_instances);
 }
 
-void init(Drawable_Mesh_2D_UV* mesh, const char* texture_path, uint reserved_mem_size = 0)
+void init(Drawable_Mesh_2D_UV* mesh, uint reserved_mem_size = 0, vec2 tex_offset = {}, vec2 scale = vec2(1))
 {
 	float verts[] = {
-		// X     Y
 		-1.f, -1.f, // 0  1-------3
 		-1.f,  1.f, // 1  |       |
 		 1.f, -1.f, // 2  |       |
 		 1.f,  1.f  // 3  0-------2
+	};
+
+	float coords[] = {
+		(0.f * scale.x) + tex_offset.x, (0.f * scale.y) + tex_offset.y, // 0  1-------3
+		(0.f * scale.x) + tex_offset.x, (1.f * scale.y) + tex_offset.y, // 1  |       |
+		(1.f * scale.x) + tex_offset.x, (0.f * scale.y) + tex_offset.y, // 2  |       |
+		(1.f * scale.x) + tex_offset.x, (1.f * scale.y) + tex_offset.y  // 3  0-------2
 	};
 
 	uint indicies[] = {
@@ -854,12 +859,11 @@ void init(Drawable_Mesh_2D_UV* mesh, const char* texture_path, uint reserved_mem
 	glGenVertexArrays(1, &mesh->VAO);
 	glBindVertexArray(mesh->VAO);
 
-#define RENDER_MEM_SIZE (reserved_mem_size + sizeof(verts))
 	glGenBuffers(1, &mesh->VBO);
 	glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
-	glBufferData(GL_ARRAY_BUFFER, RENDER_MEM_SIZE, NULL, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, reserved_mem_size + sizeof(verts) + sizeof(coords), NULL, GL_STATIC_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(verts), verts);
-#undef RENDER_MEM_SIZE
+	glBufferSubData(GL_ARRAY_BUFFER, offset + sizeof(verts), sizeof(coords), coords);
 
 	glGenBuffers(1, &mesh->EBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->EBO);
@@ -870,27 +874,10 @@ void init(Drawable_Mesh_2D_UV* mesh, const char* texture_path, uint reserved_mem
 		GLint vert_attrib = 0; // position of a vertex
 		glVertexAttribPointer(vert_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)offset);
 		glEnableVertexAttribArray(vert_attrib);
-	}
 
-	if (texture_path)
-	{
-		int width, height, num_channels;
-		byte* image;
-
-		stbi_set_flip_vertically_on_load(true);
-
-		image = stbi_load(texture_path, &width, &height, &num_channels, 0);
-
-		glGenTextures(1, &(mesh->texture_id));
-		glBindTexture(GL_TEXTURE_2D, mesh->texture_id);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		stbi_image_free(image);
+		GLint tex_attrib = 1; offset += sizeof(verts);
+		glVertexAttribPointer(tex_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), (void*)offset);
+		glEnableVertexAttribArray(tex_attrib);
 	}
 }
 void update(Drawable_Mesh_2D_UV mesh, uint vb_size = NULL, byte* vb_data = NULL)
@@ -901,28 +888,27 @@ void update(Drawable_Mesh_2D_UV mesh, uint vb_size = NULL, byte* vb_data = NULL)
 		glBufferSubData(GL_ARRAY_BUFFER, 0, vb_size, vb_data);
 	}
 }
-void bind_texture(Drawable_Mesh_2D_UV mesh, uint texture_unit = 0)
-{
-	glActiveTexture(GL_TEXTURE0 + texture_unit);
-	glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-}
 void draw(Drawable_Mesh_2D_UV mesh, uint num_instances = 1)
 {
 	glBindVertexArray(mesh.VAO);
 	glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, num_instances);
 }
 
-// animation
+// -------------------- Animation ------------------ //
 
-#define MAX_ANIMATED_BONES 16
+#define MAX_ANIM_BONES 16
 
 struct Animation
 {
 	uint num_bones, num_frames;
 
-	mat4  ibm[MAX_ANIMATED_BONES]; // inverse-bind matrices
-	mat4* keyframes[MAX_ANIMATED_BONES];
-	int parents[MAX_ANIMATED_BONES]; // indices of parent bones
+	mat4  ibm       [MAX_ANIM_BONES]; // inverse-bind matrices
+	mat4* keyframes [MAX_ANIM_BONES];
+	int   parents   [MAX_ANIM_BONES]; // indices of parent bones
+
+	// playback
+	uint current_frame;
+	float timer;
 };
 
 void load(Animation* anim, const char* path)
@@ -946,8 +932,11 @@ void load(Animation* anim, const char* path)
 	}
 
 	fclose(read);
+
+	anim->current_frame = 0;
+	anim->timer = 1.f / anim->num_frames;
 }
-void update_pose(Animation* anim, mat4* poses, uint frame_1, uint frame_2, float mix)
+void update_animation_pose(Animation* anim, mat4* poses, uint frame_1, uint frame_2, float mix)
 {
 	mat4* keyframes = Alloc(mat4, anim->num_bones);
 
@@ -969,8 +958,45 @@ void update_pose(Animation* anim, mat4* poses, uint frame_1, uint frame_2, float
 
 	free(keyframes);
 }
+void update_animation(Animation* anim, mat4* poses, float dtime)
+{
+	anim->timer += dtime;
 
-// camera
+	if (anim->timer > 1)
+	{
+		anim->timer = 0;
+		if (++anim->current_frame > anim->num_frames - 1) anim->current_frame = 0;
+		//out(anim->current_frame);
+	}
+
+	mat4* keyframes = Alloc(mat4, anim->num_bones);
+
+	uint frame = anim->current_frame;
+	uint next_frame = frame + 1;
+
+	if (frame >= anim->num_frames)
+	{
+		frame = 0;
+		next_frame = 1;
+	}
+	if (next_frame >= anim->num_frames)
+	{
+		next_frame = 0;
+	} //out(frame << ',' << next_frame);
+
+	//float mix = lerp_spring(anim->timer / 1.f, 10, 15);
+	//float mix = lerp(0, 1, anim->timer / 1.f);
+	//float mix = lerp(0, 1, sin(PI - (anim->timer * PI * .5)));
+	float mix = lerp(0, 1, sin(anim->timer * PI * .5));
+	//float mix = bounce(anim->timer / 1.f);
+	update_animation_pose(anim, poses, frame, next_frame, mix);
+
+	free(keyframes);
+}
+
+// -------------------- 3D Camera ------------------ //
+
+#define FOV ToRadians(45.0f)
 
 #define DIR_FORWARD	0
 #define DIR_BACKWARD	1
@@ -985,24 +1011,17 @@ struct Camera
 	float trauma;
 };
 
-void camera_update_dir(Camera* camera, float dx, float dy, float dtime, float sensitivity = 0.003)
+void update_dir(Camera* camera, float dx, float dy, float dtime, float sensitivity = 0.003)
 {
-	// camera shake
-	float trauma = camera->trauma;
-
-	static uint offset = random_uint() % 16;
+	float trauma = camera->trauma; // camera shake
 
 	if (camera->trauma > 1) camera->trauma = 1;
 	if (camera->trauma > 0) camera->trauma -= dtime;
-	else
-	{
-		camera->trauma = 0;
-		offset = random_uint() % 16;
-	}
 
-	float p1 = ((perlin((trauma + offset + 0) * 1000) * 2) - 1) * trauma;
-	float p2 = ((perlin((trauma + offset + 1) * 2000) * 2) - 1) * trauma;
-	float p3 = ((perlin((trauma + offset + 2) * 3000) * 2) - 1) * trauma;
+	float intensity = trauma;
+	float p1 = perlins(trauma * 50, randfn() * 10) * intensity;
+	float p2 = perlins(trauma * 50, randfn() * 10) * intensity;
+	float p3 = perlins(trauma * 50, randfn() * 10) * intensity;
 
 	float shake_yaw   = ToRadians(p1);
 	float shake_pitch = ToRadians(p2);
@@ -1014,7 +1033,7 @@ void camera_update_dir(Camera* camera, float dx, float dy, float dtime, float se
 	float yaw   = camera->yaw + shake_yaw;
 	float pitch = camera->pitch + shake_pitch;
 
-	// it feels a little different (better?) if we let the shake actually move the camera a little
+	// it feels different (better?) if we let the shake actually move the camera a little
 	//camera->yaw   += shake_yaw;
 	//camera->pitch += shake_pitch;
 
@@ -1033,63 +1052,10 @@ void camera_update_dir(Camera* camera, float dx, float dy, float dtime, float se
 	mat3 roll = glm::rotate(shake_roll, camera->front);
 	camera->up = roll * camera->up;
 }
-void camera_update_pos(Camera* camera, int direction, float distance)
+void update_pos(Camera* camera, int direction, float distance)
 {
 	if (direction == DIR_FORWARD ) camera->position += camera->front * distance;
 	if (direction == DIR_LEFT    ) camera->position -= camera->right * distance;
 	if (direction == DIR_RIGHT   ) camera->position += camera->right * distance;
 	if (direction == DIR_BACKWARD) camera->position -= camera->front * distance;
-}
-
-// crosshair rendering
-
-struct Quad_Drawable
-{
-	vec2 position;
-	vec2 scale;
-	vec3 color;
-};
-
-struct Crosshair_Renderer
-{
-	Quad_Drawable quads[4];
-	Drawable_Mesh_2D mesh;
-	Shader shader;
-};
-
-void init(Crosshair_Renderer* renderer)
-{
-	*renderer = {};
-	init(&renderer->mesh, 4 * sizeof(Quad_Drawable));
-	mesh_add_attrib_vec2(1, sizeof(Quad_Drawable), 0); // position
-	mesh_add_attrib_vec2(2, sizeof(Quad_Drawable), sizeof(vec2)); // scale
-	mesh_add_attrib_vec3(3, sizeof(Quad_Drawable), sizeof(vec2) + sizeof(vec2)); // color
-
-	load(&renderer->shader, "assets/shaders/mesh_2D.vert", "assets/shaders/mesh_2D.frag");
-
-	vec2 position = vec2(0, 0);
-	vec2 scale = vec2(.003, .005) / 2.f;
-	vec3 color = vec3(1, 0, 0);
-
-	renderer->quads[0].position = position + vec2(.006f, 0);
-	renderer->quads[0].scale = scale;
-	renderer->quads[0].color = color;
-	renderer->quads[1].position = position - vec2(.006f, 0);
-	renderer->quads[1].scale = scale;
-	renderer->quads[1].color = color;
-	renderer->quads[2].position = position + vec2(0, .01f);
-	renderer->quads[2].scale = scale;
-	renderer->quads[2].color = color;
-	renderer->quads[3].position = position - vec2(0, .01f);
-	renderer->quads[3].scale = scale;
-	renderer->quads[3].color = color;
-}
-void update(Crosshair_Renderer* renderer)
-{
-	update(renderer->mesh, 4 * sizeof(Quad_Drawable), (byte*)renderer->quads);
-}
-void draw(Crosshair_Renderer* renderer)
-{
-	bind(renderer->shader);
-	draw(renderer->mesh, 4);
 }

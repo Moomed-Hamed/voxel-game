@@ -18,8 +18,9 @@ layout (binding = 1) uniform sampler2D material_sampler;
 
 void main()
 {
-	vec2 material = texture(material_sampler, vs_out.tex_coord).rg;
+	vec3 material = texture(material_sampler, vs_out.tex_coord).rgb;
 	frag_position = vec4(vs_out.frag_pos, material.r);  // metalness
 	frag_normal   = vec4(vs_out.normal  , material.g);  // roughness
-	frag_albedo   = vec4(texture(texture_sampler, vs_out.tex_coord).rgb, 0); // ambient occlusion
+	//frag_albedo   = vec4(texture(texture_sampler, vs_out.tex_coord).rgb, material.b); // ambient occlusion
+	frag_albedo   = vec4(texture(texture_sampler, vs_out.tex_coord).rgb, .2); // ambient occlusion
 }
