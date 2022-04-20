@@ -46,6 +46,7 @@ int gui_item_index(Icon_Drawable* icons, Mouse mouse, int selected_index = -1)
 {
 	for (int i = 0; i < NUM_PLAYER_ITEMS; i++)
 	{
+		// icons are in the order : [hotbar][backpack][interactable(chest, furnace, etc.)]
 		if (mouse_in_quad(icons[i], mouse) && i != selected_index)
 			return i;
 	}
@@ -88,6 +89,15 @@ void init(GUI_Renderer* renderer)
 }
 void update(GUI_Renderer* renderer, Mouse mouse, Item* player_items, uint screen = 1, int selected_index = -1, Item* items = NULL)
 {
+	// screen = which GUI should be displayed : inventory, crafting table, furnace, etc.
+	// selected_index : item the player has equipped : -1 = none, 3 = 4th inventory slot, 
+	//                                                 > NUM_PLAYER_INVENTORY_ITEMS = item is not on the player
+	// items = items for whatever the player is interacting with(eg. chest); NULL = nothing open
+	// player_items : player inventory
+
+	// Warning : this system is a first draft, it relies on alot of obscure details
+	// The order in which icons are added to the render buffer matters, see get_item_index for more information
+
 	ZeroMemory(renderer->quads, sizeof(renderer->quads));
 	ZeroMemory(renderer->icons, sizeof(renderer->icons));
 
@@ -96,9 +106,10 @@ void update(GUI_Renderer* renderer, Mouse mouse, Item* player_items, uint screen
 	vec2 scale = vec2(.3, .5); // makes a square in a 16:9 screen (i think)
 	vec3 color = vec3(.1);
 
+	// texture coordinates of an item
 	auto tex = [](u16 block) {u16 m = block % 16; return vec2(m / 16.f, (block - m) / 16.f); };
 
-	// --- icons  --- //
+	// --- icons --- //
 	
 	// hotbar
 	for (uint i = 0; i < NUM_HOTBAR_ITEMS; i++)
@@ -129,7 +140,7 @@ void update(GUI_Renderer* renderer, Mouse mouse, Item* player_items, uint screen
 		for (uint i = 0, n = 0; i < 3; i++)
 		for (uint j = 0; j < 3; j++)
 			renderer->icons[num_icons++] = { vec2(-.66 + (i * .12), .7 - (j * .2)), scale / 6.f, tex(items[n++].id) };
-
+		
 		// crafting window
 		for (uint i = 0; i < 3; i++)
 		for (uint j = 0; j < 3; j++)

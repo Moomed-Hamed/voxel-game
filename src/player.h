@@ -17,7 +17,7 @@ struct Player
 	uint status, action;
 	float action_progress, action_time;
 	
-	uint equipped_item; // for neutral (which hotbar item is selected)
+	uint equipped_item; // which hotbar item is selected // TODO : phrase this better plz
 	
 	// UI
 	int selected_item;

@@ -45,7 +45,6 @@ Item smelt(Item item)
 
 	return Item{}; // cannot smelt item
 }
-
 Item crush(Item item)
 {
 	switch (item.id)
@@ -57,7 +56,6 @@ Item crush(Item item)
 
 	return Item{}; // cannot smelt item
 }
-
 Item wash(Item item)
 {
 	switch (item.id)
@@ -94,11 +92,11 @@ struct Crafting_Table
 };
 
 #define MAX_CHESTS 1
-#define MAX_CHEST_ITEMS (12 * 4)
+#define NUM_CHEST_ITEMS (12 * 4)
 
 struct Chest
 {
-	Item items[MAX_CHEST_ITEMS];
+	Item items[NUM_CHEST_ITEMS];
 	uvec3 coord;
 };
 
@@ -117,7 +115,7 @@ Item get_next_item(Chest* chests, uvec3 coords)
 
 	if (chest)
 	{
-		for (uint i = 0; i < MAX_CHEST_ITEMS; i++)
+		for (uint i = 0; i < NUM_CHEST_ITEMS; i++)
 		{
 			if (chest->items[i].type == NULL) continue;
 

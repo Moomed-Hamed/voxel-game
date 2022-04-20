@@ -36,6 +36,8 @@ int main()
 	Shader lighting_shader = make_lighting_shader();
 	mat4 proj = perspective(FOV, (float)window.screen_width / window.screen_height, 0.1f, DRAW_DISTANCE);
 
+	Chest chest = {};
+
 	// frame timer
 	float frame_time = 1.f / 60;
 	int64 target_frame_milliseconds = frame_time * 1000.f; // seconds * 1000 = milliseconds
@@ -55,7 +57,7 @@ int main()
 		// renderer updates
 		update(particle_renderer , emitter);
 		update(world_renderer, world, frame_time);
-		update(gui, mouse, player->items, player->action, player->selected_item, player->opened_items);
+		update(gui, mouse, player->items, player->action, player->selected_item, chest.items);// player->opened_items);
 
 		if (player->status != STATUS_IN_MENU)
 			disable_cursor(window);

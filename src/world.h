@@ -1,8 +1,8 @@
 #include "items.h"
 
-#define MAX_WORLD_ITEMS 64 // items that can be dropped in the world
-
 extern uint give_player_item(Item* player_items, Item item); // is this bad?
+
+#define MAX_WORLD_ITEMS 64 // items that can be dropped in the world
 
 struct World_Item // an item that has been dropped in the world
 {
@@ -103,7 +103,7 @@ struct World_Renderer
 	Chunk_Renderer chunks[NUM_ACTIVE_CHUNKS];
 
 	// world items
-	uint num_blocks;
+	uint num_blocks; // what is this????
 	Item_Drawable blocks[MAX_WORLD_ITEMS]; // just for blocks
 	Item_Drawable items [MAX_WORLD_ITEMS]; // general purpose
 	Drawable_Mesh_UV block_mesh, item_mesh;

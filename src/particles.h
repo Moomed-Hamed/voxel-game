@@ -72,6 +72,7 @@ void emit_sphere(Particle_Emitter* emitter, vec3 pos, uint type, float speed = 1
 
 void emit_blockbreak(Particle_Emitter* emitter, vec3 position)
 {
+	// should this function take a block id?
 	for (uint i = 0; i < 6; i++) emit_sphere(emitter, position, PARTICLE_SPARK, 3);
 	for (uint i = 0; i < 3; i++) emit_sphere(emitter, position, PARTICLE_DEBRIS, 1);
 }
