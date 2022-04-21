@@ -1,10 +1,10 @@
-## Blocks & Items (items.h)
+### Blocks & Items (items.h)
 
 Every block has an ID number. The numbers are ordered to make handling them in code easier.
 blocks with the same texture on all sides come first, then blocks with
 potentially different textures on every side, then fluids come last(air = 0).
 
-## Chunks and Generation (chunk.h & world.h)
+### Chunks and Generation (chunk.h & world.h)
 
 - Active chunk : loaded in memory, fully simulated; always 9 of these
 - Border chunk : loaded in memory, partly simulated; always 7 of these
@@ -15,7 +15,7 @@ and primed chunks based on which chunk the player is currently in. This list is 
 the list of currently loaded chunks, any chunks that need to be loaded are loaded, and any chunks
 that need to be unloaded are unloaded.
 
-## GUI (gui.h)
+### GUI (gui.h)
 
 - Quad Drawable : shape with solid color
 - Icon Drawable : quad with an image on it (can be transparent)
@@ -30,7 +30,7 @@ in a specific order: [hotbar]-[backpack]-[interactable]. Hotbar items are always
 then(if open) the inventory items, then (if present) the items in whichever interactable the player is
 using(chest, furnace, etc.)
 
-## Player (player.h)
+### Player (player.h)
 
 - equipped_item : number corresponding to which hotbar item is equipped
 - selected_item : item that the player is holding with the mouse(i think?)
@@ -41,6 +41,31 @@ so there is a set order that elements are drawn in. The hotbar icons are drawn f
 icons are drawn(if the player has their inventory open). Then the hotbar & inventory quads are drawn(behind 
 the icons).
 
-## World (world.h)
+### World (world.h)
 
 - world_item : item in the world that does not belong to an inventory(eg. when a block is broken)
+
+## Engine
+
+### Window (window.h)
+
+window.h is where the project code starts, it contains the boilerplate include and the code for launching
+a window, OpenGL(graphics), and OpenAL(audio). It also contains the code for keyboard and mouse processing.
+
+### Particles
+
+
+
+### Rendering (renderer.h)
+
+renderer.h contains code for loading meshes, shaders, and animation data(skeletons & poses)
+
+#### Shaders
+
+- assets/shaders/plain/ : shaders for drawing static meshes (position + normal) (no animated meshes rn)
+- assets/shaders/transform/ : plain shader + additional position & rotation parameters
+- lighting.frag & lighting.vert : lighting shaders (see PBR(#PBR-:-Physically-Based-Rendering) section)
+
+To render a mesh you need a shader, assets/shaders/
+
+#### PBR : Physically Based Rendering
