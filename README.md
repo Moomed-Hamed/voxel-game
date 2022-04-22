@@ -57,12 +57,12 @@ Features | [File Structure](#File-Structure) | [Reviews](#Reviews) | [Credits](#
  ┃ ┣ 📂shaders
  ┃ ┃ ┣✏️basic.vert
  ┃ ┃ ┗✏️basic.frag
- ┃ ┣ 📂textures
- ┃ ┃ ┣🎨block_atlas.bmp
- ┃ ┃ ┣🎨icons.bmp
- ┃ ┃ ┣🎨materials.bmp
- ┃ ┃ ┣🎨multi_face.bmp
- ┃ ┃ ┗🎨palette.bmp
+ ┃ ┗ 📂textures
+ ┃    ┣🎨block_atlas.bmp
+ ┃    ┣🎨icons.bmp
+ ┃    ┣🎨materials.bmp
+ ┃    ┣🎨multi_face.bmp
+ ┃    ┗🎨palette.bmp
  ┣ 📂dependencies
  ┃ ┣ 📂external
  ┃ ┃ ┣📚GLEW
@@ -70,9 +70,9 @@ Features | [File Structure](#File-Structure) | [Reviews](#Reviews) | [Credits](#
  ┃ ┃ ┣📚GLM
  ┃ ┃ ┣📚OpenAL
  ┃ ┃ ┗🔸stb_image.h
- ┃ ┣ 📂proprietary
- ┃ ┃ ┣🔸boilerplate.h
- ┃ ┗ ┗🔸mathematics.h
+ ┃ ┗ 📂proprietary
+ ┃    ┣🔸boilerplate.h
+ ┃    ┗🔸mathematics.h
  ┣ 📖README.txt
  ┗ ⚖️LICENSE.txt
 ```
